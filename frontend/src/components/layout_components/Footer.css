@@ -1,0 +1,211 @@
+/* Footer Styles */
+.footer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    /* padding: 0 10px; */
+    background: white;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Light Mode Colors */
+  :root {
+    --footer-bg: white;
+    --nav-inactive: #777;
+    --nav-active: #ff4757;
+    --nav-text: #555;
+    --nav-text-active: #ff4757;
+    --cart-bg: #ff4757;
+    --cart-icon: white;
+    --cart-badge: white;
+    --cart-badge-text: #ff4757;
+    --footer-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Dark Mode Colors */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --footer-bg: #1a1a1a;
+      --nav-inactive: #aaa;
+      --nav-active: #ff6b81;
+      --nav-text: #ddd;
+      --nav-text-active: #ff6b81;
+      --cart-bg: #ff6b81;
+      --cart-icon: white;
+      --cart-badge: white;
+      --cart-badge-text: #ff6b81;
+      --footer-shadow: 0 -5px 15px rgba(0, 0, 0, 0.3);
+    }
+  }
+  
+  .footer-container {
+    background: var(--footer-bg);
+    box-shadow: var(--footer-shadow);
+  }
+  
+  .bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 70px;
+    position: relative;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--nav-inactive);
+    font-size: 0.8rem;
+    flex: 1;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+  }
+  
+  .nav-item.active {
+    color: var(--nav-active);
+    transform: translateY(-5px);
+  }
+  
+  .nav-icon {
+    font-size: 1.4rem;
+    margin-bottom: 3px;
+  }
+  
+  .nav-text {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--nav-text);
+  }
+  
+  .nav-item.active .nav-text {
+    color: var(--nav-text-active);
+    font-weight: 600;
+  }
+  
+  /* Cart Button Styles */
+  .cart-button {
+    position: absolute;
+    left: 50%;
+    top: -25px;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+  
+  .cart-icon-container {
+    background: var(--cart-bg);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  .cart-icon {
+    color: var(--cart-icon);
+    font-size: 1.6rem;
+  }
+  
+  .cart-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--cart-badge);
+    color: var(--cart-badge-text);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: bold;
+    border: 2px solid var(--footer-bg);
+  }
+  
+  /* Active State & Hover Effects */
+  .nav-item:not(.active):hover {
+    color: var(--nav-active);
+  }
+  
+  .cart-icon-container:hover {
+    transform: scale(1.1);
+  }
+  
+  /* Responsive Adjustments */
+  @media (max-width: 400px) {
+    .bottom-nav {
+      height: 60px;
+    }
+    
+    .nav-icon {
+      font-size: 1.2rem;
+    }
+    
+    .nav-text {
+      font-size: 0.6rem;
+    }
+    
+    .cart-button {
+      top: -20px;
+    }
+    
+    .cart-icon-container {
+      width: 45px;
+      height: 45px;
+    }
+    
+    .cart-icon {
+      font-size: 1.4rem;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .bottom-nav {
+      max-width: 600px;
+    }
+    
+    .nav-icon {
+      font-size: 1.5rem;
+    }
+    
+    .nav-text {
+      font-size: 0.8rem;
+    }
+    
+    .cart-button {
+      top: -30px;
+      width: 70px;
+      height: 70px;
+    }
+    
+    .cart-icon-container {
+      width: 60px;
+      height: 60px;
+    }
+    
+    .cart-icon {
+      font-size: 1.8rem;
+    }
+    
+    .cart-badge {
+      width: 24px;
+      height: 24px;
+      font-size: 0.8rem;
+    }
+  }

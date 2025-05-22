@@ -1,0 +1,153 @@
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 13, in <module>
+    from whitenoise import WhiteNoise
+ModuleNotFoundError: No module named 'whitenoise'
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 13, in <module>
+    from whitenoise import WhiteNoise
+ModuleNotFoundError: No module named 'whitenoise'
+[UID:1547][2889892] Child process with pid: 2889895 was killed by signal: 15, core dumped: no
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 13, in <module>
+    from whitenoise import WhiteNoise
+ModuleNotFoundError: No module named 'whitenoise'
+[UID:1547][2889892] Child process with pid: 2890015 was killed by signal: 15, core dumped: no
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 13, in <module>
+    from whitenoise import WhiteNoise
+ModuleNotFoundError: No module named 'whitenoise'
+[UID:1547][2889892] Child process with pid: 2890200 was killed by signal: 15, core dumped: no
+[UID:1547][2186530] Child process with pid: 2191446 was killed by signal: 15, core dumped: no
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+Error sending order to Facebook: 'Settings' object has no attribute 'FACEBOOK_CAPI_ACCESS_TOKEN'
+[UID:1547][3022546] Child process with pid: 3039098 was killed by signal: 15, core dumped: no
+[UID:1547][3610254] Child process with pid: 3610269 was killed by signal: 15, core dumped: no
+[UID:1547][1704267] Child process with pid: 1752437 was killed by signal: 15, core dumped: no
+[UID:1547][1704267] Child process with pid: 1753954 was killed by signal: 15, core dumped: no
+[UID:1547][382075] Child process with pid: 382084 was killed by signal: 15, core dumped: no
+[UID:1547][382075] Child process with pid: 382083 was killed by signal: 15, core dumped: no
+[UID:1547][3035897] Child process with pid: 3083185 was killed by signal: 15, core dumped: no
+[UID:1547][3651828] Child process with pid: 3691279 was killed by signal: 15, core dumped: no
+/home/thefoodp/foodpark-backend/api/views.py: Error [ApplyDiscountView]: unable to guess serializer. This is graceful fallback handling for APIViews. Consider using GenericAPIView as view base class, if view is under your control. Either way you may want to add a serializer_class (or method). Ignoring view for now.
+/home/thefoodp/foodpark-backend/api/serializers.py: Warning [AllOrders > OrderSerializer]: unable to resolve type hint for function "get_order_time". Consider using a type hint or @extend_schema_field. Defaulting to string.
+/home/thefoodp/foodpark-backend/api/serializers.py: Warning [SingleOrder > OrderSerializer]: unable to resolve type hint for function "get_order_time". Consider using a type hint or @extend_schema_field. Defaulting to string.
+/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/rest_framework/serializers.py: Warning [TokenDestroyView > Serializer]: Component name "" contains illegal characters. Only "A-Z a-z 0-9 - . _" are allowed. Furthermore, "-" and "." are discoursed due to potential tooling issues. This likely leads to an invalid schema.
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 17, in <module>
+    application = get_wsgi_application()
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/core/wsgi.py", line 12, in get_wsgi_application
+    django.setup(set_prefix=False)
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/__init__.py", line 19, in setup
+    configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 81, in __getattr__
+    self._setup(name)
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 68, in _setup
+    self._wrapped = Settings(settings_module)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 166, in __init__
+    mod = importlib.import_module(self.SETTINGS_MODULE)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/alt/python311/lib64/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/foodpark-backend/ecommerce/settings.py", line 152
+    in
+    ^^
+SyntaxError: invalid syntax
+Traceback (most recent call last):
+  File "/home/thefoodp/foodpark-backend/passenger_wsgi.py", line 1, in <module>
+    from ecommerce.wsgi import application
+  File "/home/thefoodp/foodpark-backend/ecommerce/wsgi.py", line 17, in <module>
+    application = get_wsgi_application()
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/core/wsgi.py", line 12, in get_wsgi_application
+    django.setup(set_prefix=False)
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/__init__.py", line 19, in setup
+    configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 81, in __getattr__
+    self._setup(name)
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 68, in _setup
+    self._wrapped = Settings(settings_module)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/django/conf/__init__.py", line 166, in __init__
+    mod = importlib.import_module(self.SETTINGS_MODULE)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/alt/python311/lib64/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/thefoodp/foodpark-backend/ecommerce/settings.py", line 152
+    in
+    ^^
+SyntaxError: invalid syntax
+[UID:1547][647721] Child process with pid: 647748 was killed by signal: 15, core dumped: no
+[UID:1547][1733713] Child process with pid: 1733726 was killed by signal: 15, core dumped: no
+[UID:1547][3949617] Child process with pid: 3949844 was killed by signal: 15, core dumped: no
+[UID:1547][1744708] Child process with pid: 1862182 was killed by signal: 15, core dumped: no
+[UID:1547][3062052] Child process with pid: 3062094 was killed by signal: 15, core dumped: no
+[UID:1547][55447] Child process with pid: 89425 was killed by signal: 15, core dumped: no
+[UID:1547][345566] Child process with pid: 361796 was killed by signal: 15, core dumped: no
+[UID:1547][2678272] Child process with pid: 2989377 was killed by signal: 15, core dumped: no
+[UID:1547][2678272] Child process with pid: 2989378 was killed by signal: 15, core dumped: no
+[UID:1547][3224201] Child process with pid: 3255218 was killed by signal: 15, core dumped: no
+[UID:1547][3224201] Child process with pid: 3255217 was killed by signal: 15, core dumped: no
+/home/thefoodp/foodpark-backend/api/views.py: Error [ApplyDiscountView]: unable to guess serializer. This is graceful fallback handling for APIViews. Consider using GenericAPIView as view base class, if view is under your control. Either way you may want to add a serializer_class (or method). Ignoring view for now.
+/home/thefoodp/foodpark-backend/api/serializers.py: Warning [AllOrders > OrderSerializer]: unable to resolve type hint for function "get_order_time". Consider using a type hint or @extend_schema_field. Defaulting to string.
+/home/thefoodp/foodpark-backend/api/serializers.py: Warning [SingleOrder > OrderSerializer]: unable to resolve type hint for function "get_order_time". Consider using a type hint or @extend_schema_field. Defaulting to string.
+/home/thefoodp/virtualenv/foodpark-backend/3.11/lib/python3.11/site-packages/rest_framework/serializers.py: Warning [TokenDestroyView > Serializer]: Component name "" contains illegal characters. Only "A-Z a-z 0-9 - . _" are allowed. Furthermore, "-" and "." are discoursed due to potential tooling issues. This likely leads to an invalid schema.
+[UID:1547][3635406] Child process with pid: 3635435 was killed by signal: 15, core dumped: no
+[UID:1547][2168914] Child process with pid: 2179121 was killed by signal: 15, core dumped: no
+[UID:1547][2168914] Child process with pid: 2179120 was killed by signal: 15, core dumped: no
+[UID:1547][1067980] Child process with pid: 1079931 was killed by signal: 15, core dumped: no
+[UID:1547][1117075] Child process with pid: 1117085 was killed by signal: 15, core dumped: no
+[UID:1547][1117075] Child process with pid: 1117084 was killed by signal: 15, core dumped: no
+[UID:1547][1679357] Child process with pid: 1679401 was killed by signal: 15, core dumped: no
+[UID:1547][1679357] Child process with pid: 1679400 was killed by signal: 15, core dumped: no
+[UID:1547][940445] Child process with pid: 991566 was killed by signal: 15, core dumped: no
+[UID:1547][3515676] Child process with pid: 3637415 was killed by signal: 15, core dumped: no
+[UID:1547][2987448] Child process with pid: 2987458 was killed by signal: 15, core dumped: no
+[UID:1547][2987448] Child process with pid: 2987459 was killed by signal: 15, core dumped: no
+[UID:1547][3368898] Child process with pid: 3368908 was killed by signal: 15, core dumped: no
+[UID:1547][3368898] Child process with pid: 3368907 was killed by signal: 15, core dumped: no
+[UID:1547][1195414] Child process with pid: 1212377 was killed by signal: 15, core dumped: no
+[UID:1547][2451609] Child process with pid: 2451634 was killed by signal: 15, core dumped: no
+[UID:1547][2451609] Child process with pid: 2451635 was killed by signal: 15, core dumped: no
+[UID:1547][125958] Child process with pid: 125966 was killed by signal: 15, core dumped: no
+[UID:1547][200070] Child process with pid: 200087 was killed by signal: 15, core dumped: no
+[UID:1547][200070] Child process with pid: 200088 was killed by signal: 15, core dumped: no
+[UID:1547][653871] Child process with pid: 653902 was killed by signal: 15, core dumped: no
+[UID:1547][653871] Child process with pid: 653903 was killed by signal: 15, core dumped: no
+[UID:1547][2219570] Child process with pid: 2397139 was killed by signal: 15, core dumped: no
+[UID:1547][3100587] Child process with pid: 3100649 was killed by signal: 15, core dumped: no
+[UID:1547][2397713] Child process with pid: 2400157 was killed by signal: 15, core dumped: no
+[UID:1547][2397713] Child process with pid: 2400158 was killed by signal: 15, core dumped: no
