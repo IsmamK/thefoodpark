@@ -22,6 +22,118 @@ const Orders = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [copiedData, setCopiedData] = useState('');
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+const [editingPrices, setEditingPrices] = useState({});
+const [newDiscount, setNewDiscount] = useState({ amount: '', is_percentage: false });
+
+const startEditingPrices = (order) => {
+  setEditingOrder(order.id);
+  const prices = {};
+  order.order_items.forEach(item => {
+    prices[item.id] = item.price || (order.subtotal / order.order_items.length);
+  });
+  setEditingPrices(prices);
+  setNewDiscount({
+    amount: order.discount?.amount || '',
+    is_percentage: order.discount?.is_percentage || false
+  });
+};
+
+const cancelEditing = () => {
+  setEditingOrder(null);
+  setEditingPrices({});
+  setNewDiscount({ amount: '', is_percentage: false });
+};
+
+const handlePriceChange = (itemId, newPrice) => {
+  setEditingPrices(prev => ({
+    ...prev,
+    [itemId]: parseFloat(newPrice) || 0
+  }));
+};
+
+const handleDiscountChange = (e) => {
+  const { name, value, type, checked } = e.target;
+  setNewDiscount(prev => ({
+    ...prev,
+    [name]: type === 'checkbox' ? checked : value
+  }));
+};
+
+const calculateNewSubtotal = (order) => {
+  return Object.values(editingPrices).reduce((sum, price) => sum + price, 0);
+};
+
+const calculateNewGrandtotal = (order) => {
+  let subtotal = calculateNewSubtotal(order);
+  if (newDiscount.amount) {
+    const discountAmount = newDiscount.is_percentage 
+      ? subtotal * (parseFloat(newDiscount.amount) / 100)
+      : parseFloat(newDiscount.amount);
+    subtotal -= discountAmount;
+  }
+  return subtotal + 100; // Adding delivery charge
+};
+
+const saveOrderChanges = async (order) => {
+  try {
+    // Update order items
+    const itemUpdates = order.order_items.map(item => ({
+      id: item.id,
+      price: editingPrices[item.id]
+    }));
+
+    // Prepare order update
+    const orderUpdate = {
+      subtotal: calculateNewSubtotal(order),
+      grandtotal: calculateNewGrandtotal(order),
+    };
+
+    // Add discount if changed
+    if (newDiscount.amount) {
+      orderUpdate.discount = {
+        name: 'Manual Adjustment',
+        amount: parseFloat(newDiscount.amount),
+        is_percentage: newDiscount.is_percentage
+      };
+    } else if (order.discount) {
+      orderUpdate.discount = null; // Remove discount if amount is empty
+    }
+
+    // First update items
+    await Promise.all(
+      itemUpdates.map(item => 
+        fetch(`${apiUrl}/order-items/${item.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ price: item.price })
+        })
+      )
+    );
+
+    // Then update order
+    const response = await fetch(`${apiUrl}/orders/${order.id}/`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(orderUpdate)
+    });
+
+    if (response.ok) {
+      await Swal.fire('Success!', 'Order prices updated successfully', 'success');
+      fetchOrders(activeTab);
+      cancelEditing();
+    } else {
+      throw new Error('Failed to update order');
+    }
+  } catch (error) {
+    Swal.fire('Error!', 'Failed to update order prices', 'error');
+    console.error('Error updating order:', error);
+  }
+};
 
 
   const apiUrl = import.meta.env.VITE_API_URL;     
@@ -40,20 +152,21 @@ const Orders = () => {
     setSelectAll(false);
   }, [activeTab]);
 
-  const fetchOrders = async (status) => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${apiUrl}/orders/?status=${status}&expand=order_items.product`);
-      const data = await response.json();
-      const sortedOrders = data.sort((a, b) => 
-        new Date(b.order_time.replace(',', '')) - new Date(a.order_time.replace(',', '')))
-      setOrders(sortedOrders);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+
+const fetchOrders = async (status) => {
+  try {
+    setLoading(true);
+    const response = await fetch(`${apiUrl}/orders/?status=${status}&expand=order_items.product,order_items.product_name`);
+    const data = await response.json();
+    const sortedOrders = data.sort((a, b) => 
+      new Date(b.order_time.replace(',', '')) - new Date(a.order_time.replace(',', '')));
+    setOrders(sortedOrders);
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const toggleOrderExpand = (orderId) => {
     setExpandedOrder(expandedOrder === orderId ? null : orderId);
@@ -211,60 +324,63 @@ const Orders = () => {
     setSelectAll(!selectAll);
   };
 
-  const copySelectedOrdersData = () => {
-    if (selectedOrders.length === 0) {
-      Swal.fire('No orders selected', 'Please select orders to copy', 'warning');
-      return;
-    }
-  
-    const selectedOrdersData = orders.filter(order => selectedOrders.includes(order.id));
-  
-    let formattedText = '';
-    selectedOrdersData.forEach((order, index) => {
-      formattedText += `${index + 1})\n\nCustomer Name: ${order.name}\nPhone No: ${order.phone_number}\nAddress: ${order.shipping_address}\n\nOrder Items: ${order.order_items.map(item => `${item.product} (x${item.quantity})`).join(', ')}\n\nGrandtotal: BDT ${parseFloat(order.grandtotal).toFixed(2)}\nDelivery Charge: BDT 100\n\nTotal Bill: BDT ${(parseFloat(order.grandtotal) + 100).toFixed(2)}\n\n\n\n`;
+const copySelectedOrdersData = () => {
+  if (selectedOrders.length === 0) {
+    Swal.fire('No orders selected', 'Please select orders to copy', 'warning');
+    return;
+  }
+
+  const selectedOrdersData = orders.filter(order => selectedOrders.includes(order.id));
+
+  let formattedText = '';
+  selectedOrdersData.forEach((order, index) => {
+    formattedText += `${index + 1})\n\nCustomer Name: ${order.name}\nPhone No: ${order.phone_number}\nAddress: ${order.shipping_address}\n\nOrder Items: ${order.order_items.map(item => `${item.product_name || `Product ${item.product}`} (x${item.quantity})`).join(', ')}\n\nOrder Value: BDT ${parseFloat(order.grandtotal - 100).toFixed(2)}\nDelivery Charge: BDT 100\n\nTotal Bill: BDT ${parseFloat(order.grandtotal).toFixed(2)}\n\n\n\n`;
+  });
+
+  navigator.clipboard.writeText(formattedText)
+    .then(() => {
+      setCopiedData(formattedText);
+      setShowCopyToast(true);
+      setTimeout(() => setShowCopyToast(false), 2000);
+    })
+    .catch(err => {
+      console.error('Failed to copy:', err);
+      Swal.fire('Copy Failed', 'Could not copy to clipboard.', 'error');
     });
-  
-    navigator.clipboard.writeText(formattedText)
-      .then(() => {
-        setCopiedData(formattedText);
-        setShowCopyToast(true);
-        setTimeout(() => setShowCopyToast(false), 2000);
-      })
-      .catch(err => {
-        console.error('Failed to copy:', err);
-        Swal.fire('Copy Failed', 'Could not copy to clipboard.', 'error');
-      });
-  };
+};
   
   
 
-  // Calculate order summary statistics
-  const calculateOrderSummary = () => {
-    const itemDetails = {};
-    let totalValue = 0;
-  
-    filteredOrders.forEach(order => {
-      totalValue += parseFloat(order.grandtotal);
-      order.order_items.forEach(item => {
-        const itemName = `Product ID: ${item.product}`; // Fallback to product ID if title is missing
-        if (!itemDetails[itemName]) {
-          itemDetails[itemName] = {
-            quantity: 0,
-            total: 0
-          };
-        }
-        itemDetails[itemName].quantity += item.quantity;
-        // Use order's subtotal divided by items if individual prices aren't available
-        itemDetails[itemName].total += item.quantity * (item.price || (parseFloat(order.subtotal) / order.order_items.length));
-      });
+const calculateOrderSummary = () => {
+  const itemDetails = {};
+  let totalValue = 0;
+  let totalOrders = filteredOrders.length;
+
+  filteredOrders.forEach(order => {
+    // Subtract delivery charge (assuming it's 100) from grandtotal for calculation
+    const orderValue = parseFloat(order.grandtotal) - 100;
+    totalValue += orderValue > 0 ? orderValue : 0;
+    
+    order.order_items.forEach(item => {
+      const itemName = item.product_name || `Product ID: ${item.product}`;
+      if (!itemDetails[itemName]) {
+        itemDetails[itemName] = {
+          quantity: 0,
+          total: 0
+        };
+      }
+      itemDetails[itemName].quantity += item.quantity;
+      itemDetails[itemName].total += item.quantity * (item.price || (parseFloat(order.subtotal) / order.order_items.length));
     });
-  
-    return {
-      totalOrders: filteredOrders.length,
-      totalValue,
-      itemDetails
-    };
+  });
+
+  return {
+    totalOrders,
+    totalValue,
+    averageValue: totalOrders > 0 ? totalValue / totalOrders : 0,
+    itemDetails
   };
+};
   
 
   const orderSummary = calculateOrderSummary();
@@ -371,30 +487,31 @@ const Orders = () => {
     </div>
     
     {/* Total Value Card */}
-    <div className="bg-green-50 p-4 rounded-lg border border-green-100">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-green-600 font-medium">Total Value</p>
-          <p className="text-2xl font-bold text-green-800 mt-1">{formatCurrency(orderSummary.totalValue)}</p>
-        </div>
-        <FiDollarSign className="h-8 w-8 text-green-400 opacity-70" />
+  <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-green-600 font-medium">Total Value (excl. delivery)</p>
+        <p className="text-2xl font-bold text-green-800 mt-1">{formatCurrency(orderSummary.totalValue)}</p>
+        <p className="text-xs text-green-600 mt-1">+ {formatCurrency(100 * orderSummary.totalOrders)} delivery</p>
       </div>
+      <FiDollarSign className="h-8 w-8 text-green-400 opacity-70" />
     </div>
+  </div>
     
     {/* Average Order Value Card */}
     <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-purple-600 font-medium">Avg. Order Value</p>
-          <p className="text-2xl font-bold text-purple-800 mt-1">
-            {orderSummary.totalOrders > 0 
-              ? formatCurrency(orderSummary.totalValue / orderSummary.totalOrders)
-              : formatCurrency(0)}
-          </p>
-        </div>
-        <FiTrendingUp className="h-8 w-8 text-purple-400 opacity-70" />
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-purple-600 font-medium">Avg. Order Value</p>
+        <p className="text-2xl font-bold text-purple-800 mt-1">
+          {formatCurrency(orderSummary.averageValue)}
+        </p>
+        <p className="text-xs text-purple-600 mt-1">excl. delivery charge</p>
       </div>
+      <FiTrendingUp className="h-8 w-8 text-purple-400 opacity-70" />
     </div>
+  </div>
+
   </div>
   
   {/* Items Breakdown */}
@@ -557,6 +674,34 @@ const Orders = () => {
                  <FiChevronDown className="text-gray-400 text-sm" />
                )}
              </div>
+
+               
+  <div className="flex items-center gap-2">
+    {editingOrder === order.id ? (
+      <>
+        <button
+          onClick={() => saveOrderChanges(order)}
+          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+        >
+          Save
+        </button>
+        <button
+          onClick={cancelEditing}
+          className="px-3 py-1 bg-gray-200 text-gray-800 rounded text-sm hover:bg-gray-300"
+        >
+          Cancel
+        </button>
+      </>
+    ) : (
+      <button
+        onClick={() => startEditingPrices(order)}
+        className="flex items-center px-3 py-1 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
+      >
+        <FiEdit2 className="mr-1" />
+        Edit Prices
+      </button>
+    )}
+  </div>
            </div>
          
             {/* Order Details */}
@@ -595,33 +740,80 @@ const Orders = () => {
                         </dl>
                       </section>
             
-                      {/* ORDER SUMMARY */}
-                      <section>
-                        <h3 className="flex items-center gap-2 text-indigo-600 font-semibold mb-3 text-sm uppercase tracking-wider">
-                          <FiDollarSign className="w-5 h-5" />
-                          Order Summary
-                        </h3>
-                        <dl className="text-gray-700 text-sm space-y-2">
-                          <div className="flex justify-between">
-                            <dt>Subtotal:</dt>
-                            <dd>{formatCurrency(order.subtotal)}</dd>
-                          </div>
-                          {order.discount && (
-                            <div className="flex justify-between text-red-600">
-                              <dt>Discount ({order.discount.name}):</dt>
-                              <dd>
-                                -{order.discount.is_percentage
-                                  ? `${order.discount.amount}%`
-                                  : formatCurrency(order.discount.amount)}
-                              </dd>
-                            </div>
-                          )}
-                          <div className="flex justify-between font-semibold text-indigo-600 text-lg mt-2 border-t pt-2">
-                            <dt>Total:</dt>
-                            <dd>{formatCurrency(order.grandtotal)}</dd>
-                          </div>
-                        </dl>
-                      </section>
+                     {/* ORDER SUMMARY */}
+<section>
+  <h3 className="flex items-center gap-2 text-indigo-600 font-semibold mb-3 text-sm uppercase tracking-wider">
+    <FiDollarSign className="w-5 h-5" />
+    Order Summary
+    {editingOrder === order.id && (
+      <span className="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+        Editing Mode
+      </span>
+    )}
+  </h3>
+  <dl className="text-gray-700 text-sm space-y-2">
+    <div className="flex justify-between">
+      <dt>Subtotal:</dt>
+      <dd>
+        {editingOrder === order.id ? (
+          formatCurrency(calculateNewSubtotal(order))
+        ) : (
+          formatCurrency(order.subtotal)
+        )}
+      </dd>
+    </div>
+    
+    {editingOrder === order.id ? (
+      <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+        <div className="flex items-center justify-between mb-2">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="is_percentage"
+              checked={newDiscount.is_percentage}
+              onChange={handleDiscountChange}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span className="ml-2">Percentage Discount</span>
+          </label>
+          <input
+            type="number"
+            name="amount"
+            value={newDiscount.amount}
+            onChange={handleDiscountChange}
+            placeholder="Discount amount"
+            className="w-24 px-2 py-1 border rounded text-right"
+          />
+        </div>
+      </div>
+    ) : order.discount ? (
+      <div className="flex justify-between text-red-600">
+        <dt>Discount ({order.discount.name}):</dt>
+        <dd>
+          -{order.discount.is_percentage
+            ? `${order.discount.amount}%`
+            : formatCurrency(order.discount.amount)}
+        </dd>
+      </div>
+    ) : null}
+    
+    <div className="flex justify-between">
+      <dt>Delivery Charge:</dt>
+      <dd>{formatCurrency(100)}</dd>
+    </div>
+    
+    <div className="flex justify-between font-semibold text-indigo-600 text-lg mt-2 border-t pt-2">
+      <dt>Total:</dt>
+      <dd>
+        {editingOrder === order.id ? (
+          formatCurrency(calculateNewGrandtotal(order))
+        ) : (
+          formatCurrency(order.grandtotal)
+        )}
+      </dd>
+    </div>
+  </dl>
+</section>
             
                    
                     </div>
@@ -642,21 +834,35 @@ const Orders = () => {
                               <th className="px-4 py-3 text-right">Total</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {order.order_items.map((item) => {
-                              const price = item.product_price || 0;
-                              return (
-                                <tr key={item.id} className="hover:bg-indigo-50 transition-colors">
-                                  <td className="px-4 py-3 font-medium">{item.product_name || `Product #${item.product}`}</td>
-                                  <td className="px-4 py-3 text-right">{formatCurrency(price)}</td>
-                                  <td className="px-4 py-3 text-right">{item.quantity}</td>
-                                  <td className="px-4 py-3 text-right font-semibold">
-                                    {formatCurrency(price * item.quantity)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
+<tbody className="divide-y divide-gray-100">
+  {order.order_items.map((item) => {
+    const price = editingOrder === order.id 
+      ? editingPrices[item.id] 
+      : item.price || (order.subtotal / order.order_items.length);
+    
+    return (
+      <tr key={item.id} className="hover:bg-indigo-50 transition-colors">
+        <td className="px-4 py-3 font-medium">{item.product_name || `Product #${item.product}`}</td>
+        <td className="px-4 py-3 text-right">
+          {editingOrder === order.id ? (
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => handlePriceChange(item.id, e.target.value)}
+              className="w-20 px-2 py-1 border rounded text-right"
+            />
+          ) : (
+            formatCurrency(price)
+          )}
+        </td>
+        <td className="px-4 py-3 text-right">{item.quantity}</td>
+        <td className="px-4 py-3 text-right font-semibold">
+          {formatCurrency(price * item.quantity)}
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
                           <tfoot className="bg-indigo-50 font-semibold text-indigo-700">
                             <tr>
                               <td colSpan={3} className="px-4 py-2 text-right">Subtotal:</td>
