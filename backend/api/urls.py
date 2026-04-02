@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 
+
 app_name = 'api'
 
 urlpatterns = [
@@ -37,9 +38,15 @@ urlpatterns = [
     path('discounts/', views.AllDiscounts.as_view(), name='discount-list'),
     path('discounts/<int:pk>/', views.SingleDiscount.as_view(), name='discount-detail'),
     path('apply_discount/', views.ApplyDiscountView.as_view(), name='apply-discount'),
- 
+    path('track_add_to_cart/', views.track_add_to_cart, name='track_add_to_cart'),
 
 
+    path('track/view_content/', views.track_view_content, name='track_view_content'),
+    path('track/add_to_cart/', views.track_add_to_cart, name='track_add_to_cart'),
+    path('track/checkout/', views.track_checkout, name='track_checkout'),
+    path('track/purchase/', views.track_purchase, name='track_purchase'),
+
+    path('products/featured/', views.FeaturedProductListView.as_view(), name='featured-products'),
 
 
 

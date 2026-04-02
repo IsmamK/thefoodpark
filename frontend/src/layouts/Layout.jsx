@@ -1,19 +1,21 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Footer from '../components/layout_components/Footer';
-import Header from '../components/layout_components/Header';
+import Navbar from '../components/layout_components/Header';
 
 
 const Layout = () => {
+  const location = useLocation();
+const showFooter = !['/cart', '/checkout'].includes(location.pathname);
   return (
     <>
-         <Header />
+         <Navbar />
       <Outlet />
  
       {/* Footer will be hidden on lg (1024px) and larger screens */}
       <div className="sticky bottom-0 lg:hidden z-10 mt-20">
-        <Footer />
-      </div>
+    {showFooter && <Footer />}
+          </div>
     </>
   );
 };

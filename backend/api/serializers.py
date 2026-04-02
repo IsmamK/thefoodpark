@@ -48,34 +48,25 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 
+# serializers.py
 class OrderSerializer(serializers.ModelSerializer):
-    order_items = OrderItemSerializer(many=True, required=False)
-    discount = DiscountSerializer(read_only=True)
-    discount_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    order_time = serializers.SerializerMethodField()
-    
     class Meta:
         model = Order
-        fields = "__all__"
+        fields = '__all__'
+        extra_kwargs = {
+            'email': {
+                'required': False,
+                'allow_blank': True,
+                'default': ''
+            }
+        }
+
+    def validate(self, data):
+        # Set empty string if email not provided
+        if 'email' not in data:
+            data['email'] = ''
+        return data
     
-    def create(self, validated_data):
-        order_items_data = validated_data.pop('order_items', [])
-        order = Order.objects.create(**validated_data)
-        
-        for item_data in order_items_data:
-            # Ensure we're using the product ID, not the object
-            OrderItem.objects.create(
-                order=order,
-                product_id=item_data['product'].id if hasattr(item_data['product'], 'id') else item_data['product'],
-                quantity=item_data['quantity']
-            )
-            
-        return order
-    
-    def get_order_time(self, obj):
-        return obj.order_time.strftime('%d %b %Y, %I:%M %p')
-    
-   
 # class OrderSerializer(serializers.ModelSerializer):
 #     order_items = OrderItemSerializer(many=True, required=False)
     

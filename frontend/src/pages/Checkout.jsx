@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FaTruck, FaMapMarkerAlt, FaPhone, FaUser, FaTag, FaArrowRight, FaChevronLeft, FaArrowDown } from 'react-icons/fa';
+import { FaTruck, FaMapMarkerAlt, FaPhone, FaUser, FaArrowRight, FaChevronLeft, FaEnvelope, FaTag, FaInfoCircle, FaCheckCircle, FaTimes, FaEdit, FaShoppingCart } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -8,248 +8,333 @@ import axios from 'axios';
 const Checkout = () => {
   const navigate = useNavigate();
   const apiUrl = import.meta.env.VITE_API_URL;
-  
+  const [showDiscountInput, setShowDiscountInput] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    address: ''
+    address: '',
+    email: ''
   });
-  const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [discountCode, setDiscountCode] = useState('');
-  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+
   const [orderSummary, setOrderSummary] = useState({
     subtotal: '0.00',
     deliveryFee: '100.00',
     total: '100.00',
     discountAmount: '0.00',
-    grandTotal: '100.00'
+    grandTotal: '100.00',
   });
+
   const [cartItems, setCartItems] = useState([]);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [showOrderReview, setShowOrderReview] = useState(false);
   const [orderId, setOrderId] = useState(null);
 
-  // Load cart items and calculate initial order summary
-// In the useEffect where you load cart items:
-useEffect(() => {
-  const items = JSON.parse(localStorage.getItem('cartItems') || '[]');
-  setCartItems(Array.isArray(items) ? items : []);
-  
-  if (items.length > 0) {
-    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
-    const deliveryFee = 100.00;
-    const total = subtotal + deliveryFee;
-    
-    setOrderSummary({
-      subtotal: subtotal.toFixed(2),
-      deliveryFee: deliveryFee.toFixed(2),
-      total: total.toFixed(2),
-      discountAmount: '0.00',
-      grandTotal: total.toFixed(2)
-    });
-  }
-}, []);
+  // Track checkout initiation
+  const trackCheckout = async () => {
+    try {
+      await axios.post(`${apiUrl}/track/checkout/`, {
+        checkout: {
+          items: cartItems.map(item => ({
+            id: item.id,
+            title: item.title,
+            price: parseFloat(item.price),
+            quantity: item.quantity
+          })),
+          value: parseFloat(orderSummary.total),
+          currency: 'BDT',
+          user_email: formData.email || null,
+          user_phone: formData.phone || null
+        }
+      });
+    } catch (err) {
+      console.error('Error tracking checkout:', err);
+    }
+  };
+
+  // Track purchase completion
+  const trackPurchase = async (orderId) => {
+    try {
+      await axios.post(`${apiUrl}/track/purchase/`, {
+        purchase: {
+          order_id: orderId.toString(),
+          items: cartItems.map(item => ({
+            id: item.id,
+            title: item.title,
+            price: parseFloat(item.price),
+            quantity: item.quantity
+          })),
+          value: parseFloat(orderSummary.grandTotal),
+          currency: 'BDT',
+          user_email: formData.email || null,
+          user_phone: formData.phone || null
+        }
+      });
+    } catch (err) {
+      console.error('Error tracking purchase:', err);
+    }
+  };
+
+  useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      console.log('Mobile browser detected - applying mobile optimizations');
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadCartData = () => {
+      const orderData = JSON.parse(localStorage.getItem('currentOrder')) || {};
+      setCartItems(orderData.items || []);
+      setOrderSummary({
+        subtotal: orderData.subtotal || '0.00',
+        deliveryFee: orderData.deliveryFee || '100.00',
+        total: orderData.total || '100.00',
+        discountAmount: '0.00',
+        grandTotal: orderData.total || '100.00',
+      });
+    };
+
+    loadCartData();
+    window.addEventListener('cartUpdated', loadCartData);
+    return () => window.removeEventListener('cartUpdated', loadCartData);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const applyDiscount = async () => {
+    if (!discountCode || !orderId) return;
+
+    setIsApplyingDiscount(true);
     try {
-      // Prepare the order data with nested order items
-      
+      // 1. Apply discount to calculate amounts
+      const applyResponse = await axios.post(`${apiUrl}/apply_discount/`, {
+        discount_code: discountCode,
+        cart_items: cartItems.map(item => ({
+          id: item.id,
+          price: parseFloat(item.price),
+          quantity: item.quantity,
+        })),
+      });
+
+      const discountAmount = parseFloat(applyResponse.data.discount_amount || 0);
+      const newTotal = parseFloat(orderSummary.total) - discountAmount;
+
+      // 2. Get discount details
+      const discountResponse = await axios.get(`${apiUrl}/discounts/?code=${discountCode}`);
+      if (discountResponse.data.length === 0) {
+        throw new Error('Discount not found');
+      }
+      const discountId = discountResponse.data[0].id;
+
+      // 3. Update order with discount
+      await axios.patch(`${apiUrl}/orders/${orderId}/`, {
+        discount: discountId,
+        grandtotal: newTotal.toFixed(2),
+        subtotal: (newTotal - parseFloat(orderSummary.deliveryFee)).toFixed(2),
+      });
+
+      // Update local state
+      setOrderSummary(prev => ({
+        ...prev,
+        discountAmount: discountAmount.toFixed(2),
+        grandTotal: newTotal.toFixed(2),
+      }));
+
+      Swal.fire({
+        title: 'Discount Applied!',
+        text: `You saved ৳${discountAmount.toFixed(2)}`,
+        icon: 'success',
+        timer: 1000,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Discount error:', error);
+      Swal.fire({
+        title: 'Discount Error',
+        text: error.response?.data?.error || 'Invalid discount code',
+        icon: 'error',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } finally {
+      setIsApplyingDiscount(false);
+    }
+  };
+
+  const saveCustomerInfo = async () => {
+    try {
       const orderData = {
         name: formData.name,
         phone_number: formData.phone,
         shipping_address: formData.address,
+        email: formData.email || '',
         subtotal: orderSummary.subtotal,
         grandtotal: orderSummary.total,
         status: 'checkout',
         order_items: cartItems.map(item => ({
-          product: item.id,  // Make sure this is just the ID, not the whole product object
-          quantity: item.quantity
-        }))
+          product: item.id,
+          quantity: item.quantity,
+        })),
       };
-  
-      const response = await axios.post(`${apiUrl}/orders/`, orderData);
+
+      // Mobile-friendly fetch with timeout and retry
+      const saveWithRetry = async (retries = 3) => {
+        try {
+          const response = await Promise.race([
+            axios.post(`${apiUrl}/orders/`, orderData),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), 8000)
+            )
+          ]);
+          return response;
+        } catch (error) {
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return saveWithRetry(retries - 1);
+          }
+          throw error;
+        }
+      };
+
+      const response = await saveWithRetry();
       setOrderId(response.data.id);
-      setShowDiscountModal(true);
       
+      // Track checkout event after saving customer info
+      await trackCheckout();
+      
+      return true;
     } catch (error) {
-      console.error('Error creating order:', error.response?.data);
+      console.error('Order creation error:', error);
       Swal.fire({
-        title: 'Error',
-        text: error.response?.data?.non_field_errors?.[0] || 'Failed to proceed to checkout',
+        title: 'Connection Issue',
+        html: `
+          <div class="text-center">
+            <p class="mb-2">Failed to save your information.</p>
+            <p class="text-sm text-gray-600">Please check your internet connection and try again.</p>
+            <p class="text-xs mt-2">If problem persists, try:</p>
+            <ul class="text-xs text-left list-disc pl-5 mt-1">
+              <li>Switching to a different browser</li>
+              <li>Using a WiFi connection</li>
+              <li>Restarting the app</li>
+            </ul>
+          </div>
+        `,
         icon: 'error',
-        timer: 2000,
-        showConfirmButton: false
+        confirmButtonColor: '#eab308',
       });
+      return false;
     }
   };
 
-// Modify applyDiscount to update the existing order
-const applyDiscount = async () => {
-  if (!discountCode || !orderId) return;
-  
-  setIsApplyingDiscount(true);
-  try {
-    const response = await axios.post(`${apiUrl}/apply_discount/`, {
-      discount_code: discountCode,
-      cart_items: cartItems.map(item => ({
-        id: item.id,
-        price: parseFloat(item.price),
-        quantity: item.quantity
-      }))
-    });
-
-    const discountAmount = parseFloat(response.data.discount_amount || 0);
-    const newTotal = parseFloat(orderSummary.total) - discountAmount;
+  const placeOrder = async () => {
+    setIsPlacingOrder(true);
     
-    setOrderSummary(prev => ({
-      ...prev,
-      discountAmount: discountAmount.toFixed(2),
-      grandTotal: newTotal.toFixed(2)
-    }));
+    try {
+      // Mobile-friendly order placement with timeout
+      const response = await Promise.race([
+        axios.patch(`${apiUrl}/orders/${orderId}/`, {
+          status: 'placed',
+          grandtotal: orderSummary.grandTotal,
+          name: formData.name,
+          phone_number: formData.phone,
+          shipping_address: formData.address,
+          email: formData.email || '',
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Order placement timeout')), 10000)
+        )
+      ]);
 
-    // Update the order with discount code and new total
-    await axios.patch(`${apiUrl}/orders/${orderId}/`, {
-      discount_code: discountCode,
-      grandtotal: newTotal.toFixed(2),
-      subtotal: (newTotal - parseFloat(orderSummary.deliveryFee)).toFixed(2)
-    });
+      // Clear cart and show success
+      localStorage.removeItem('cartItems');
+      localStorage.removeItem('currentOrder');
+      window.dispatchEvent(new Event('cartUpdated'));
 
-    Swal.fire({
-      title: 'Discount Applied!',
-      text: `Discount of ৳${discountAmount.toFixed(2)} has been applied`,
-      icon: 'success',
-      timer: 750,
-      showConfirmButton: false
-    });
-  } catch (error) {
-    console.error('Error applying discount:', error);
-    Swal.fire({
-      title: 'Discount Error',
-      text: error.response?.data?.error || 'Failed to apply discount code',
-      icon: 'error',
-      timer: 2000,
-      showConfirmButton: false
-    });
-  } finally {
-    setIsApplyingDiscount(false);
-  }
-};
+      // Track purchase event after successful order placement
+      await trackPurchase(response.data.id);
+      
+      showSuccessModal(response.data.id);
+      
+    } catch (error) {
+      console.error('Order placement error:', error);
+      Swal.fire({
+        title: 'Order Issue',
+        html: `
+          <div class="text-center">
+            <p class="mb-2">${error.message.includes('timeout') ? 
+              'Request took too long' : 'Failed to complete order'}.</p>
+            <p class="text-sm text-gray-600">Please check your connection and try again.</p>
+            ${/Android|iPhone/i.test(navigator.userAgent) ? 
+              '<p class="text-xs mt-2">Tip: Try switching from mobile data to WiFi</p>' : ''}
+          </div>
+        `,
+        icon: 'error',
+        confirmButtonColor: '#eab308',
+      });
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
 
-// Modify placeOrder to update order status
-const placeOrder = async () => {
-  if (!orderId) {
+  const showSuccessModal = (orderId) => {
     Swal.fire({
-      title: 'Order Error',
-      text: 'No order found to place',
-      icon: 'error',
-      timer: 1500,
-      showConfirmButton: false
-    });
-    return;
-  }
-
-  setIsPlacingOrder(true);
-  try {
-    // Update the order status to "placed"
-    const response = await axios.patch(`${apiUrl}/orders/${orderId}/`, {
-      status: 'placed'
-    });
-    
-    // Clear cart and show success
-    localStorage.removeItem('cartItems');
-    window.dispatchEvent(new Event('cartUpdated'));
-    Swal.fire({
-      title: `Order #${response.data.id} Confirmed!`,
-      html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 15px; font-size: 16px;">
-            Thank you for your order! Here are your order details:
+      title: `
+        <div class="flex flex-col items-center">
+          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+            <svg class="text-green-500 w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15 5.293 11.879a1 1 0 111.414-1.414L8.414 12.172l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
           </div>
-          
-          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <div style="font-weight: bold; margin-bottom: 10px;">Order Summary:</div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Order Number:</span>
-              <span style="font-weight: bold;">#${response.data.id}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Order Date:</span>
-              <span>${new Date().toLocaleDateString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Total Items:</span>
-              <span>${cartItems.reduce((sum, item) => sum + item.quantity, 0)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Order Value:</span>
-              <span style="font-weight: bold;">৳${orderSummary.grandTotal}</span>
-            </div>
-          </div>
-    
-          <div style="margin-bottom: 15px;">
-            <div style="font-weight: bold; margin-bottom: 5px;">Delivery Address:</div>
-            <div>${formData.address}</div>
-          </div>
-    
-          <div style="margin-bottom: 15px; font-size: 15px; color: #28a745;">
-            <i class="fas fa-check-circle"></i> Your order has been confirmed!
-            <div style="font-size: 14px; margin-top: 5px;">
-              Expected delivery within 2-3 business days
-            </div>
-          </div>
+          <h3 class="text-xl sm:text-2xl font-bold text-gray-900">Order Confirmed!</h3>
         </div>
       `,
-      icon: 'success',
-      showCloseButton: true,
-      confirmButtonText: '<i class="fas fa-phone"></i> Call for Queries',
-      cancelButtonText: '<i class="fas fa-shopping-bag"></i> Continue Shopping',
+      html: `
+        <div class="text-center mt-2">
+          <p class="text-gray-700 mb-4 text-sm sm:text-base">Thanks <strong>${formData.name}</strong>! Your order was placed successfully.</p>
+
+          <div class="bg-yellow-50 rounded-xl p-3 sm:p-4 mb-4 border border-yellow-200 text-left text-xs sm:text-sm">
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600">Order ID:</span>
+              <span class="font-medium">${orderId}</span>
+            </div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600">Total:</span>
+              <span class="font-semibold text-yellow-600">৳${orderSummary.grandTotal}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">Delivery:</span>
+              <span class="text-right max-w-[150px] sm:max-w-none truncate">${formData.address}</span>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 rounded-lg p-2 sm:p-3 mb-3 text-xs sm:text-sm">
+            <p class="text-gray-600 mb-1">We'll contact you at:</p>
+            <p class="font-medium text-gray-800">${formData.phone}</p>
+          </div>
+
+          <p class="text-xs sm:text-sm text-gray-500">Confirmation sent to: <strong>${formData.email || 'your phone'}</strong></p>
+        </div>
+      `,
       showCancelButton: true,
+      confirmButtonText: `<i class="fas fa-phone-alt mr-2"></i> Call Support`,
+      cancelButtonText: `<i class="fas fa-shopping-cart ml-2 mr-2"></i> Continue Shopping`,
+      confirmButtonColor: '#facc15',
+      cancelButtonColor: '#e5e7eb',
       focusConfirm: false,
       customClass: {
-       
-        popup: 'order-confirmation-popup',
-        confirmButton: 'btn btn-success',
-        cancelButton: 'btn btn-light'
+        popup: 'rounded-2xl shadow-xl px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 max-w-[90vw]',
+        confirmButton: 'bg-yellow-400 text-gray-900 font-medium hover:bg-yellow-500 px-3 sm:px-4 mr-2 py-2 rounded-lg text-sm sm:text-base',
+        cancelButton: 'bg-gray-200 text-gray-800 hover:bg-gray-300 px-3 sm:px-4 py-2 ml-2 rounded-lg text-sm sm:text-base',
+        title: 'px-0',
       },
       buttonsStyling: false,
-      didOpen: () => {
-        // Add icons if FontAwesome is available
-        if (window.FontAwesome) {
-          const confirmButton = document.querySelector('.swal2-confirm');
-          const cancelButton = document.querySelector('.swal2-cancel');
-      
-          // Add icons
-          confirmButton.innerHTML = `<i class="fas fa-phone" style="margin-right: 8px;"></i> ${confirmButton.textContent}`;
-          cancelButton.innerHTML = `<i class="fas fa-shopping-bag" style="margin-right: 8px;"></i> ${cancelButton.textContent}`;
-        }
-      
-        // Style the buttons
-        const confirmButton = document.querySelector('.swal2-confirm');
-        const cancelButton = document.querySelector('.swal2-cancel');
-        const actions = document.querySelector('.swal2-actions');
-      
-        if (confirmButton && cancelButton && actions) {
-          // Make texts white
-          confirmButton.style.color = 'white';
-          cancelButton.style.color = 'white';
-      
-          // Add danger color to cancel button
-          cancelButton.style.backgroundColor = '#d33'; // SweetAlert's danger red
-          cancelButton.style.border = 'none';
-      
-          // Add spacing between buttons
-          actions.style.display = 'flex';
-          actions.style.gap = '1rem';
-          actions.style.justifyContent = 'center';
-        }
-      }
-      
+      showCloseButton: true,
     }).then((result) => {
       if (result.isConfirmed) {
         window.location.href = 'tel:+8801887445596';
@@ -257,223 +342,310 @@ const placeOrder = async () => {
         navigate('/');
       }
     });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     
-  } catch (error) {
-    console.error('Error placing order:', error);
-    Swal.fire({
-      title: 'Order Failed',
-      text: error.response?.data?.error || 'Failed to place order',
-      icon: 'error',
-      timer: 2000,
-      showConfirmButton: false
-    });
-  } finally {
+    if (!formData.name || !formData.phone || !formData.address) {
+      Swal.fire({
+        title: 'Missing Information',
+        text: 'Please fill in all required fields',
+        icon: 'warning',
+        confirmButtonColor: '#eab308',
+      });
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    const saved = await saveCustomerInfo();
     setIsPlacingOrder(false);
-    setShowDiscountModal(false);
-  }
-};
+
+    if (saved) {
+      setShowOrderReview(true);
+    }
+  };
+
+  const editCart = () => {
+    navigate('/cart');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
-        {/* Header with Back Button */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-8 flex items-center"
-        >
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-amber-50 py-6 px-4">
+      <div className="max-w-md mx-auto">
+        {/* Header */}
+        <div className="flex items-center mb-6">
           <button 
             onClick={() => navigate(-1)}
-            className="mr-4 flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:shadow-lg transition-all"
+            className="p-2 rounded-full hover:bg-yellow-100 transition mr-3 text-yellow-600"
           >
-            <FaChevronLeft className="text-blue-500" />
+            <FaChevronLeft size={16} />
           </button>
-          <div className="text-center flex-grow">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full shadow-lg mb-4">
-              <FaTruck className="text-white text-2xl" />
+          <h1 className="text-2xl font-bold text-gray-900">
+            <span className="text-yellow-500">Checkout</span>
+          </h1>
+        </div>
+
+        {/* Delivery Notice */}
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-3 rounded-lg mb-6 flex items-start">
+          <FaInfoCircle className="text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-yellow-800">Delivery Area</p>
+            <p className="text-sm text-yellow-700">Currently serving <span className="font-bold">Dhaka city only</span>. Orders outside Dhaka cannot be fulfilled.</p>
+          </div>
+        </div>
+
+        {/* Order Items - Always Visible */}
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-200">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-bold text-gray-900 flex items-center">
+              <FaShoppingCart className="text-yellow-500 mr-2" />
+              Your Order ({cartItems.length} {cartItems.length === 1 ? 'item' : 'items'})
+            </h3>
+            <button 
+              onClick={editCart}
+              className="text-sm text-yellow-600 hover:text-yellow-700 flex items-center"
+            >
+              <FaEdit className="mr-1" /> Edit
+            </button>
+          </div>
+          
+          <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+            {cartItems.length > 0 ? (
+              cartItems.map((item, index) => (
+                <div key={index} className="flex justify-between items-start border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                  <div className="flex-1">
+                    <p className="font-medium">{item.title}</p>
+                    <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                  </div>
+                  <span className="font-medium ml-4">৳{(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">Your cart is empty</p>
+            )}
+          </div>
+        </div>
+
+        {/* Customer Info Form - shown when not in review mode */}
+        {!showOrderReview ? (
+          <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <FaUser className="mr-2 text-yellow-600" /> Name
+              </label>
+              <input
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                placeholder="Your full name"
+              />
             </div>
-            <h1 className="text-3xl font-bold text-gray-800">Shipping Details</h1>
-            <p className="text-gray-600 mt-2">Enter your information to complete your order</p>
-          </div>
-          <div className="w-10"></div>
-        </motion.div>
 
-        {/* Shipping Form */}
-        <motion.form
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          onSubmit={handleSubmit}
-          className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8"
-        >
-          <div className="space-y-6">
-            {/* Name Field */}
-            <motion.div
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-              className="relative"
-            >
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaUser className="text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                  className="pl-10 w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-3"
-                  placeholder="John Doe"
-                />
-              </div>
-            </motion.div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <FaPhone className="mr-2 text-yellow-600" /> Phone
+              </label>
+              <input
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                placeholder="01XXXXXXXXX"
+              />
+            </div>
 
-            {/* Phone Field */}
-            <motion.div
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.4 }}
-              className="relative"
-            >
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaPhone className="text-gray-400" />
-                </div>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  required
-                  className="pl-10 w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-3"
-                  placeholder="+880 1XXX XXXXXX"
-                />
-              </div>
-            </motion.div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <FaEnvelope className="mr-2 text-yellow-600" /> Email (Optional)
+              </label>
+              <input
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                placeholder="your@email.com"
+              />
+            </div>
 
-            {/* Address Field */}
-            <motion.div
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.5 }}
-              className="relative"
-            >
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Address</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 pt-3 flex items-start pointer-events-none">
-                  <FaMapMarkerAlt className="text-gray-400" />
-                </div>
-                <textarea
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  required
-                  rows={4}
-                  className="pl-10 w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-3"
-                  placeholder="House #123, Road #456, Sector #789, City"
-                />
-              </div>
-            </motion.div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <FaMapMarkerAlt className="mr-2 text-yellow-600" /> Delivery Address
+              </label>
+              <textarea
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                required
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                placeholder="Full address in Dhaka (House/Flat #, Road #, Area)"
+              />
+              <p className="text-xs text-gray-500 mt-1">Please include all details for accurate delivery</p>
+            </div>
 
-            {/* Submit Button */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all flex items-center justify-center"
+              disabled={isPlacingOrder || cartItems.length === 0}
+              className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition
+                ${isPlacingOrder || cartItems.length === 0
+                  ? 'bg-yellow-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-yellow-500 to-amber-600 hover:shadow-lg'
+                } flex items-center justify-center`}
             >
-              Discounts & Checkout
+              {isPlacingOrder ? 'Saving...' : 'Review Order'}
               <FaArrowRight className="ml-2" />
-            </motion.button>
-          </div>
-        </motion.form>
+            </button>
+          </form>
+        ) : (
+          /* Order Review Section */
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                <span className="text-yellow-500">Review Your Order</span>
+              </h2>
+              <button 
+                onClick={() => setShowOrderReview(false)}
+                className="p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+              >
+                <FaTimes size={16} />
+              </button>
+            </div>
 
-        {/* Discount & Checkout Modal */}
-        {showDiscountModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md"
-            >
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Order Summary</h2>
-              
-              {/* Discount Code Input */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Discount Code (Optional)</label>
-                <div className="flex relative">
+            {/* Customer Info Review */}
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
+              <h3 className="font-bold text-gray-900 mb-3">Contact Information</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Name</span>
+                  <span className="font-medium">{formData.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Phone</span>
+                  <span className="font-medium">{formData.phone}</span>
+                </div>
+                {formData.email && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Email</span>
+                    <span className="font-medium">{formData.email}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Address</span>
+                  <span className="text-right font-medium">{formData.address}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Discount Section */}
+            {!showDiscountInput ? (
+              <button
+                type="button"
+                onClick={() => setShowDiscountInput(true)}
+                className="w-full bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200 hover:bg-gray-50 transition flex items-center justify-between"
+              >
+                <div className="flex items-center">
+                  <FaTag className="text-yellow-500 mr-2" />
+                  <span className="font-medium text-gray-700">Have a discount code?</span>
+                </div>
+                <FaArrowRight className="text-yellow-500" />
+              </button>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200"
+              >
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold text-gray-900 flex items-center">
+                    <FaTag className="text-yellow-500 mr-2" />
+                    Apply Discount
+                  </h3>
+                  <button 
+                    onClick={() => setShowDiscountInput(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
+                <div className="flex gap-2">
                   <input
                     type="text"
                     value={discountCode}
                     onChange={(e) => setDiscountCode(e.target.value)}
-                    className="flex-grow rounded-l-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-4"
-                    placeholder="Enter promo code"
+                    placeholder="Enter discount code"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                   />
-                   <FaArrowDown className={`${isApplyingDiscount || !discountCode ? `hidden` : "block"} absolute -top-5 right-4 text-gray-400 animate-bounce`} />
-
-                  <button 
+                  <button
                     onClick={applyDiscount}
-                    disabled={isApplyingDiscount || !discountCode}
-                    className={`bg-gradient-to-r from-amber-400 to-orange-500 text-white px-4 rounded-r-lg transition-opacity ${
-                      isApplyingDiscount || !discountCode ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                    disabled={isApplyingDiscount || !discountCode.trim()}
+                    className={`px-3 py-2 rounded-lg font-medium ${
+                      isApplyingDiscount || !discountCode.trim()
+                        ? 'bg-gray-200 text-gray-500'
+                        : 'bg-yellow-500 text-white hover:bg-yellow-600'
                     }`}
                   >
-
-                    {isApplyingDiscount ? '...' : <FaTag />}
+                    {isApplyingDiscount ? 'Applying...' : 'Apply'}
                   </button>
                 </div>
-              </div>
+              </motion.div>
+            )}
 
-              {/* Order Summary */}
-              <div className="space-y-3 mb-6">
+            {/* Order Summary */}
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-200">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center">
+                <FaTruck className="text-yellow-500 mr-2" />
+                Order Summary
+              </h3>
+              
+              <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">৳{orderSummary.subtotal}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Delivery Fee</span>
-                  <span className="font-medium">৳{orderSummary.deliveryFee}</span>
+                  <span>৳{orderSummary.subtotal}</span>
                 </div>
                 {parseFloat(orderSummary.discountAmount) > 0 && (
-                  <>
-                    <div className="flex justify-between text-green-600">
-                      <span>Discount</span>
-                      <span className="font-medium">-৳{orderSummary.discountAmount}</span>
-                    </div>
-                    <div className="border-t border-gray-200 my-2"></div>
-                  </>
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount</span>
+                    <span>-৳{orderSummary.discountAmount}</span>
+                  </div>
                 )}
-                <div className="flex justify-between text-lg font-bold">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Delivery</span>
+                  <span>৳{orderSummary.deliveryFee}</span>
+                </div>
+                <div className="border-t border-gray-200 my-2"></div>
+                <div className="flex justify-between font-bold">
                   <span>Total</span>
-                  <span className="text-blue-600">৳{orderSummary.grandTotal}</span>
+                  <span className="text-yellow-600">৳{orderSummary.grandTotal}</span>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => setShowDiscountModal(false)}
-                  className="flex-grow bg-gray-200 text-gray-800 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={placeOrder}
-                  disabled={isPlacingOrder}
-                  className={`flex-grow bg-gradient-to-r from-green-500 to-emerald-500 text-white py-2 rounded-lg font-medium transition-all ${
-                    isPlacingOrder ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'
-                  }`}
-                >
-                  {isPlacingOrder ? 'Placing Order...' : 'Place Order'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
+            {/* Place Order Button */}
+            <button
+              onClick={placeOrder}
+              disabled={isPlacingOrder}
+              className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition
+                ${isPlacingOrder 
+                  ? 'bg-yellow-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-yellow-500 to-amber-600 hover:shadow-lg'
+                } flex items-center justify-center`}
+            >
+              {isPlacingOrder ? 'Placing Order...' : 'Confirm & Place Order'}
+              <FaArrowRight className="ml-2" />
+            </button>
+          </motion.div>
         )}
       </div>
     </div>

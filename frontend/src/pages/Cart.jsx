@@ -1,25 +1,32 @@
+// Updated Cart.jsx
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { motion } from 'framer-motion';
 import { FaTrash, FaMinus, FaPlus, FaArrowRight, FaChevronLeft } from 'react-icons/fa';
+import { Snowflake } from 'lucide-react';
 
 const Cart = () => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Load cart items from localStorage
   useEffect(() => {
-    const items = JSON.parse(localStorage.getItem('cartItems')) || [];
-    setCartItems(items);
-    setLoading(false);
+    try {
+      const items = JSON.parse(localStorage.getItem('cartItems')) || [];
+      const validItems = items.filter(item => item.id && item.price && item.quantity);
+      setCartItems(validItems);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error loading cart:", error);
+      setCartItems([]);
+      setLoading(false);
+    }
   }, []);
 
-  // Update quantity
   const updateQuantity = (id, newQuantity) => {
     if (newQuantity < 1) return;
-    const updatedItems = cartItems.map(item => 
+    const updatedItems = cartItems.map(item =>
       item.id === id ? { ...item, quantity: newQuantity } : item
     );
     setCartItems(updatedItems);
@@ -27,19 +34,22 @@ const Cart = () => {
     window.dispatchEvent(new Event('cartUpdated'));
   };
 
-  // Remove item
   const removeItem = (id) => {
     Swal.fire({
       title: 'Remove Item?',
       text: "Are you sure you want to remove this item from your cart?",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
+      confirmButtonColor: '#eab308',
       cancelButtonColor: '#6b7280',
       confirmButtonText: 'Yes, remove it!',
-      background: '#ffffff',
+      background: '#fff',
       customClass: {
-        popup: 'rounded-2xl shadow-2xl'
+        popup: 'rounded-3xl shadow-lg',
+        title: 'text-yellow-600 font-bold',
+        content: 'text-gray-700',
+        confirmButton: 'bg-yellow-500 hover:bg-yellow-600',
+        cancelButton: 'bg-gray-600 hover:bg-gray-700'
       }
     }).then((result) => {
       if (result.isConfirmed) {
@@ -49,21 +59,29 @@ const Cart = () => {
         window.dispatchEvent(new Event('cartUpdated'));
         Swal.fire({
           title: 'Removed!',
-          text: 'Your item has been removed.',
+          text: 'Item removed from cart.',
           icon: 'success',
-          confirmButtonColor: '#10b981'
+          confirmButtonColor: '#22c55e',
         });
       }
     });
   };
 
-  // Totals
   const subtotal = cartItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0).toFixed(2);
   const deliveryFee = 100.00;
   const total = (parseFloat(subtotal) + deliveryFee).toFixed(2);
 
-  // Proceed to Checkout
   const proceedToCheckout = () => {
+    if (cartItems.length === 0) {
+      Swal.fire({
+        title: 'Empty Cart',
+        text: 'Please add items before proceeding.',
+        icon: 'info',
+        confirmButtonColor: '#eab308',
+      });
+      return;
+    }
+
     const orderSummary = {
       subtotal,
       deliveryFee,
@@ -71,163 +89,162 @@ const Cart = () => {
       items: cartItems,
       date: new Date().toISOString()
     };
-    const existingOrders = JSON.parse(localStorage.getItem('totalCollections')) || [];
-    const updatedOrders = [...existingOrders, orderSummary];
-    localStorage.setItem('totalCollections', JSON.stringify(updatedOrders));
-    window.dispatchEvent(new Event('cartUpdated'));
+
+    localStorage.setItem('currentOrder', JSON.stringify(orderSummary));
+    navigate('/checkout');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="h-12 w-12 rounded-full border-4 border-t-transparent border-indigo-500"
+          className="h-12 w-12 border-4 border-yellow-500 border-t-transparent rounded-full"
         />
       </div>
     );
   }
 
+  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center mb-8"
-        >
-          <button 
+    <div className="min-h-screen bg-gradient-to-r from-yellow-50 to-amber-50 flex flex-col">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white bg-opacity-80 backdrop-blur-sm border-b border-gray-200 py-4 px-4">
+        <div className="max-w-2xl mx-auto flex items-center">
+          <button
             onClick={() => navigate(-1)}
-            className="flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:shadow-lg transition-all mr-4"
+            className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-all mr-3 text-yellow-600"
+            aria-label="Go back"
           >
-            <FaChevronLeft className="text-indigo-600" />
+            <FaChevronLeft size={16} />
           </button>
-          <h1 className="text-3xl font-bold text-gray-800">Your Shopping Cart</h1>
-        </motion.div>
+          <h1 className="text-xl font-bold text-gray-900">
+            <span className="text-yellow-500">Your Cart</span>
+          </h1>
+          <div className="ml-auto bg-yellow-100 px-3 py-1 rounded-full text-xs font-medium text-yellow-800 flex items-center">
+            <Snowflake className="w-3 h-3 mr-1" />
+            {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
+          </div>
+        </div>
+      </div>
 
-        {/* Empty Cart */}
-        {cartItems.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="text-center py-16"
-          >
-            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md mx-auto">
-              <div className="h-40 bg-gradient-to-r from-indigo-400 via-white to-purple-500 rounded-xl flex items-center justify-center mb-6 shadow-lg">
-                <div className="text-white text-7xl animate-bounce">🛒</div>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">Your cart feels lonely</h3>
-              <p className="text-gray-500 mb-6">Add some delicious items to get started!</p>
-              <Link 
-                to="/"
-                className="inline-block bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-3 rounded-lg font-medium hover:shadow-lg transition-all hover:scale-105"
-              >
-                Explore Menu
-              </Link>
-            </div>
-          </motion.div>
-        ) : (
-          <>
-            {/* Items */}
-            <motion.div 
+      {/* Main Content */}
+      <main className="flex-1 pb-24 pt-4 px-4">
+        <div className="max-w-2xl mx-auto">
+          {cartItems.length === 0 ? (
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="space-y-6 mb-8"
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center justify-center h-[60vh] text-center"
+            >
+              <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center mb-6">
+                <Snowflake className="w-10 h-10 text-yellow-500" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Your cart is empty</h3>
+              <p className="text-gray-600 mb-6 max-w-xs">Add some delicious frozen items to get started</p>
+              <Link
+                to="/"
+                className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-lg font-medium transition-all"
+              >
+                Browse Menu
+              </Link>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-3"
             >
               {cartItems.map((item, index) => (
                 <motion.div
                   key={item.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                  className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all transform hover:-translate-y-1"
+                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all border border-gray-100"
                 >
-                  <div className="p-2 sm:p-6 flex flex-col sm:flex-row gap-4">
-                    <div className="flex-shrink-0">
-                      <div className="h-16 w-16 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-lg overflow-hidden flex items-center justify-center shadow-inner">
-                        <img 
-                          src={item.image} 
-                          alt={item.title}
-                          className="h-full w-full object-cover object-center transform hover:scale-110 transition-transform"
-                        />
-                      </div>
+                  <div className="p-3 flex items-center gap-3">
+                    <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-50 to-amber-100 rounded-lg overflow-hidden flex items-center justify-center">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="h-full w-full object-cover object-center"
+                      />
                     </div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between items-start">
+
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-start justify-between">
                         <div>
-                          <h3 className="text-lg font-bold text-gray-800">{item.title}</h3>
-                          <p className="text-gray-600 text-sm line-clamp-2 text-wrap">{item.description}</p>
+                          <h3 className="text-sm font-semibold text-gray-900 line-clamp-1">
+                            {item.title}
+                          </h3>
+                          <p className="text-xs text-gray-500 line-clamp-1">
+                            {item.description}
+                          </p>
                         </div>
-                        <button 
+                        <button
                           onClick={() => removeItem(item.id)}
-                          className="text-red-500 hover:text-red-700 transition-colors transform hover:scale-110"
+                          className="text-amber-500 hover:text-amber-600 transition-colors ml-2"
                         >
-                          <FaTrash />
+                          <FaTrash size={14} />
                         </button>
                       </div>
-                      <div className="mt-4 flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <button 
+                      
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center space-x-2">
+                          <button
                             onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full hover:from-indigo-200 hover:to-purple-200 transition-all shadow-sm"
+                            className="w-7 h-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
                           >
-                            <FaMinus className="text-indigo-600" />
+                            <FaMinus size={10} />
                           </button>
-                          <span className="text-lg font-medium w-8 text-center">{item.quantity}</span>
-                          <button 
+                          <span className="text-sm font-medium text-gray-900 w-6 text-center">
+                            {item.quantity}
+                          </span>
+                          <button
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full hover:from-indigo-200 hover:to-purple-200 transition-all shadow-sm"
+                            className="w-7 h-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
                           >
-                            <FaPlus className="text-indigo-600" />
+                            <FaPlus size={10} />
                           </button>
                         </div>
-                        <span className="text-lg font-bold text-indigo-600">
+
+                        <p className="text-sm font-bold text-gray-900">
                           ৳{(item.price * item.quantity).toFixed(2)}
-                        </span>
+                        </p>
                       </div>
                     </div>
                   </div>
                 </motion.div>
               ))}
             </motion.div>
+          )}
+        </div>
+      </main>
 
-            {/* Summary */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="bg-white rounded-2xl shadow-2xl p-6 sticky bottom-4 border border-indigo-100"
+      {/* Sticky Footer - Only shown when cart has items */}
+      {cartItems.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 px-4 shadow-lg">
+          <div className="max-w-2xl mx-auto flex justify-between items-center">
+            <div>
+              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-lg font-bold text-yellow-600">
+                ৳{total}
+              </div>
+            </div>
+            <button
+              onClick={proceedToCheckout}
+              className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white px-6 py-3 rounded-lg font-semibold text-sm shadow-sm hover:shadow-md transition flex items-center"
             >
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium">৳{subtotal}</span>
-              </div>
-              <div className="flex justify-between items-center mb-6">
-                <span className="text-gray-600">Delivery Fee</span>
-                <span className="font-medium">৳{deliveryFee.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center text-lg font-bold mb-6">
-                <span>Total</span>
-                <span className="text-indigo-600">৳{total}</span>
-              </div>
-              <Link to="/checkout">
-                <button 
-                  onClick={proceedToCheckout}
-                  className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all flex items-center justify-center transform hover:scale-[1.01] active:scale-95"
-                >
-                  Address, Discounts & Checkout
-                  <FaArrowRight className="ml-2 animate-pulse" />
-                </button>
-              </Link>
-            </motion.div>
-          </>
-        )}
-      </div>
+              Checkout
+              <FaArrowRight className="ml-2" size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

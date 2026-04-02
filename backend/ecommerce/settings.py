@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-^-v)lg^lc+m0dp80%3ckzazj_x0!wobyyj6wc%(f4c!7+b@a3@"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     "ismamk.pythonanywhere.com",
@@ -189,3 +189,9 @@ import os
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+# Facebook CAPI Settings
+FACEBOOK_PIXEL_ID = '1154715702730044'  # Replace with your actual pixel ID
+FACEBOOK_ACCESS_TOKEN = 'EAAKZCZC9iWNKgBOznzAUUaOBvN3kE4ZCfRH8loYTkVtAMqlw3RURPB2H6vm6ZBslfy1OKlvhg01ZCzruYDbalnL9k7Te2625we0ZCzVWUvUakGD01OVhKuwpVB2dkZBuzY6t4iJZBQZCHEmhn6aM3HK6FCZBiG7DQaKxcESaCf09ZBX2ek3vWD6LgwkQituSz7cjNZCecQZDZD'  # Replace with your CAPI access token
+FACEBOOK_TEST_EVENT_CODE = "TEST46436"  # Set to your test code when testing

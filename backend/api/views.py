@@ -20,8 +20,17 @@ from rest_framework import filters
 from django.http import StreamingHttpResponse
 import time
 import json
+from .facebook_capi import FacebookCAPI
 # --------------------------------------- Categories ---------------------------------------
 
+
+from django.http import JsonResponse
+from .models import Product
+
+
+class ProductListView(generics.ListAPIView):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
 
 
 class Categories(generics.ListCreateAPIView):
@@ -90,6 +99,8 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 
+
+
 # --------------------------------------- Orders ---------------------------------------
 
 
@@ -109,8 +120,12 @@ class AllOrders(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         client_ip = self.request.META.get('REMOTE_ADDR')
-        serializer.save(client_ip_address=client_ip)
-
+        order = serializer.save(client_ip_address=client_ip)
+        
+        # Track purchase event
+        if order.status == 'placed':
+            capi = FacebookCAPI()
+            capi.send_purchase(self.request, order)
 
 class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()
@@ -123,7 +138,7 @@ class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
         # Handle discount code update
         if 'discount_code' in data:
             try:
-                discount = Discount.objects.get(code=data['discount_code'])
+                discount = Discount.objects.get(code__iexact=data['discount_code'])
                 instance.discount = discount
                 data.pop('discount_code')
             except Discount.DoesNotExist:
@@ -131,6 +146,7 @@ class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
                     {"error": "Invalid discount code"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+                        
         
         # Update other fields
         serializer = self.get_serializer(instance, data=data, partial=True)
@@ -138,6 +154,7 @@ class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
         self.perform_update(serializer)
         
         return Response(serializer.data)
+    
     
 # --------------------------------------- OrderItems ---------------------------------------
 
@@ -253,3 +270,266 @@ class ApplyDiscountView(APIView):
 
 
 # end
+
+# CAPI
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Product
+from .facebook_capi import FacebookCAPI
+# Add these to your existing views.py
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .facebook_capi import FacebookCAPI
+import logging
+
+logger = logging.getLogger(__name__)
+
+@api_view(['POST'])
+def track_view_content(request):
+    try:
+        product_data = request.data.get('product')
+        if not product_data:
+            return Response({'error': 'Product data required', 'debug': None}, status=400)
+            
+        if not isinstance(product_data, dict):
+            return Response({'error': 'Product data must be a dictionary', 'debug': None}, status=400)
+            
+        required_fields = ['id', 'title', 'price']
+        if not all(field in product_data for field in required_fields):
+            return Response({
+                'error': f'Missing required product fields: {required_fields}',
+                'debug': None
+            }, status=400)
+            
+        if isinstance(product_data['price'], (int, float)):
+            product_data['price'] = str(product_data['price'])
+            
+        product_data.setdefault('user_email', None)
+        product_data.setdefault('user_phone', None)
+        product_data.setdefault('currency', 'BDT')
+        
+        capi = FacebookCAPI()
+        result = capi.send_view_content(request, product_data)
+
+        # Enhanced response with debugging info
+        response_data = {
+            'status': 'success' if not result.get('error') else 'error',
+            'event': 'ViewContent',
+            'event_id': result.get('event_id'),
+            'facebook_response': result.get('facebook_response'),
+            'matched_parameters': result.get('matched_parameters'),
+            'sent_payload': result.get('sent_payload'),
+            'error': result.get('error'),
+        }
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in track_view_content: {str(e)}", exc_info=True)
+        return Response({
+            'error': str(e),
+            'status': 'error',
+            'facebook_response': None,
+            'debug': None
+        }, status=500)
+
+
+@api_view(['POST'])
+def track_add_to_cart(request):
+    try:
+        product_data = request.data.get('product')
+        if not product_data:
+            return Response({'error': 'Product data required', 'debug': None}, status=400)
+            
+        if not isinstance(product_data, dict):
+            return Response({'error': 'Product data must be a dictionary', 'debug': None}, status=400)
+            
+        required_fields = ['id', 'title', 'price']
+        missing_fields = [field for field in required_fields if field not in product_data]
+        if missing_fields:
+            return Response({
+                'error': f'Missing required product fields: {missing_fields}',
+                'debug': None
+            }, status=400)
+            
+        product_data.setdefault('user_email', None)
+        product_data.setdefault('user_phone', None)
+        product_data.setdefault('currency', 'BDT')
+        product_data.setdefault('quantity', 1)
+        
+        capi = FacebookCAPI()
+        result = capi.send_add_to_cart(request, product_data)
+        
+        # Enhanced response with debugging info
+        response_data = {
+            'status': 'success' if not result.get('error') else 'error',
+            'event': 'AddToCart',
+            'event_id': result.get('event_id'),
+            'facebook_response': result.get('facebook_response'),
+            'matched_parameters': result.get('matched_parameters'),
+            'sent_payload': result.get('sent_payload'),
+            'error': result.get('error'),
+        }
+        
+        if isinstance(result, dict) and 'error' in result:
+            logger.error(f"Facebook CAPI Error: {result['error']}")
+            return Response(response_data, status=500)
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in track_add_to_cart: {str(e)}", exc_info=True)
+        return Response({
+            'error': str(e),
+            'status': 'error',
+            'facebook_response': None,
+            'debug': None
+        }, status=500)
+
+
+@api_view(['POST'])
+def track_checkout(request):
+    try:
+        checkout_data = request.data.get('checkout')
+        if not checkout_data or not checkout_data.get('items'):
+            return Response({
+                'error': 'Checkout data with items required',
+                'debug': None
+            }, status=400)
+        
+        checkout_data.setdefault('user_email', None)
+        checkout_data.setdefault('user_phone', None)
+        checkout_data.setdefault('currency', 'BDT')
+        
+        capi = FacebookCAPI()
+        result = capi.send_initiate_checkout(request, checkout_data)
+        
+        # Enhanced response with debugging info
+        response_data = {
+            'status': 'success' if not result.get('error') else 'error',
+            'event': 'InitiateCheckout',
+            'event_id': result.get('event_id'),
+            'facebook_response': result.get('facebook_response'),
+            'matched_parameters': result.get('matched_parameters'),
+            'sent_payload': result.get('sent_payload'),
+            'error': result.get('error'),
+        }
+        
+        if isinstance(result, dict) and 'error' in result:
+            logger.error(f"Facebook CAPI Error: {result['error']}")
+            return Response(response_data, status=500)
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in track_checkout: {str(e)}", exc_info=True)
+        return Response({
+            'error': str(e),
+            'status': 'error',
+            'facebook_response': None,
+            'debug': None
+        }, status=500)
+    
+@api_view(['POST'])
+def track_purchase(request):
+    try:
+        # Enhanced input validation
+        purchase_data = request.data.get('purchase', {})
+        if not purchase_data:
+            return Response({
+                'status': 'error',
+                'error': 'Purchase data is required',
+                'debug': None
+            }, status=400)
+            
+        # Required fields validation with clearer error messages
+        required_fields = ['order_id', 'items', 'value']
+        missing_fields = [field for field in required_fields if field not in purchase_data]
+        
+        if missing_fields:
+            return Response({
+                'status': 'error',
+                'error': f'Missing required fields: {", ".join(missing_fields)}',
+                'debug': None
+            }, status=400)
+        
+        # Validate items structure
+        if not isinstance(purchase_data['items'], list):
+            return Response({
+                'status': 'error',
+                'error': 'Items must be an array',
+                'debug': None
+            }, status=400)
+            
+        # Validate each item in items
+        for item in purchase_data['items']:
+            if not isinstance(item, dict):
+                return Response({
+                    'status': 'error',
+                    'error': 'Each item must be an object',
+                    'debug': None
+                }, status=400)
+                
+            if 'id' not in item or 'price' not in item:
+                return Response({
+                    'status': 'error',
+                    'error': 'Each item must have id and price',
+                    'debug': None
+                }, status=400)
+        
+        # Process the purchase
+        capi = FacebookCAPI()
+        result = capi.send_purchase(request, purchase_data)
+        
+        # Standardize the response format
+        response_data = {
+            'status': result.get('status', 'error'),
+            'event': 'Purchase',
+            'event_id': result.get('event_id'),
+            'facebook_response': result.get('facebook_response'),
+            'error': result.get('error'),
+        }
+        
+        # Return appropriate status code based on result
+        status_code = 200 if response_data['status'] == 'success' else 500
+        return Response(response_data, status=status_code)
+        
+    except Exception as e:
+        logger.error(f"Error in track_purchase: {str(e)}", exc_info=True)
+        return Response({
+            'status': 'error',
+            'error': str(e),
+            'facebook_response': None,
+            'debug': None
+        }, status=500)
+    
+    
+# Add to your existing views.py
+class FeaturedProductListView(generics.ListAPIView):
+    serializer_class = ProductSerializer
+    
+    def get_queryset(self):
+        queryset = Product.objects.filter(is_active=True)
+        
+        # Option 1: If you have a dedicated 'featured' field
+        if hasattr(Product, 'is_featured'):
+            return queryset.filter(is_featured=True).order_by('-created_at')[:3]
+        
+        # Option 2: Manual selection by IDs
+        featured_ids = settings.FEATURED_PRODUCT_IDS  # Add to settings.py
+        if featured_ids:
+            return queryset.filter(id__in=featured_ids)
+        
+        # Option 3: Fallback to most popular
+        return queryset.annotate(
+            order_count=Count('order_items')
+        ).order_by('-order_count')[:3]
+    
+
+
