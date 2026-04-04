@@ -23,7 +23,7 @@ import json
 from .facebook_capi import FacebookCAPI
 # --------------------------------------- Categories ---------------------------------------
 
-
+"For deployment, use the following command to run the server: python manage.py runserver"
 from django.http import JsonResponse
 from .models import Product
 
