@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# env files
+.env
+.env.prod
+.env.dev
+.env.local
+
+# logs
+logs/
+*.log
+*.log.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# tests / cache
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# git
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# secrets
+secrets/
+keys/
+*.pem
+*.key
+id_rsa
+id_dsa
+*.crt
+*.cert
+*.p12
+*.pfx
+*.der
+*.csr
+*.p8
+
+# temporary
+.cache/
+uploads/
+temp/
+tmp/
+
+# local-only settings
+local_settings.py
+settings/local.py
+
+# large archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# docs build
+docs/_build/

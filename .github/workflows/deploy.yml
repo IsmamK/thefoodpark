@@ -1,0 +1,353 @@
+name: 🚀 Build & Deploy Food Park to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+
+  # image names from repository secrets
+  BACKEND_IMAGE_NAME: ${{ secrets.BACKEND_IMAGE_NAME }}
+  FRONTEND_IMAGE_NAME: ${{ secrets.FRONTEND_IMAGE_NAME }}
+
+  # VPS connection
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  VPS_PORT: ${{ secrets.VPS_PORT }}
+  VPS_USER: ${{ secrets.VPS_USER }}
+
+  # VPS paths
+  VPS_PROJECT_ROOT: /opt/foodpark
+  VPS_COMPOSE_DIR: /opt/foodpark/compose
+  VPS_ENV_DIR: /opt/foodpark/env
+  VPS_BACKEND_ENV: /opt/foodpark/env/backend.env
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.filter.outputs.backend }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+      any_changed: ${{ steps.any.outputs.any_changed }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          fetch-depth: 2
+
+      - name: 🔍 Detect backend/frontend changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+      - name: 🧾 Summarize detected changes
+        id: any
+        run: |
+          echo "Backend changed: ${{ steps.filter.outputs.backend }}"
+          echo "Frontend changed: ${{ steps.filter.outputs.frontend }}"
+
+          if [ "${{ steps.filter.outputs.backend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+            echo "any_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "any_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  generate-tag:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any_changed == 'true'
+    outputs:
+      image_tag: ${{ steps.generate-tag.outputs.tag }}
+
+    steps:
+      - name: 🏷️ Generate Docker image tag
+        id: generate-tag
+        run: |
+          SHORT_SHA=${GITHUB_SHA:0:8}
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          TAG="${TIMESTAMP}-${SHORT_SHA}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, generate-tag]
+    if: needs.detect-changes.outputs.backend_changed == 'true'
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PAT }}
+
+      - name: 🐳 Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, generate-tag]
+    if: needs.detect-changes.outputs.frontend_changed == 'true'
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PAT }}
+
+      - name: 🐳 Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            VITE_API_URL=https://api.thefoodpark.com
+            VITE_APP_URL=https://thefoodpark.com
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-vps:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, generate-tag, build-backend, build-frontend]
+    if: needs.detect-changes.outputs.any_changed == 'true'
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: 🔧 Set up SSH connection
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "Testing SSH connection..."
+          ssh -i ~/.ssh/deploy_key \
+            -p ${{ env.VPS_PORT }} \
+            -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=no \
+            ${{ env.VPS_USER }}@${{ env.VPS_HOST }} \
+            "echo 'SSH connection successful'"
+
+      - name: ⚡ Deploy to VPS
+        run: |
+          cat > deploy_script.sh << 'DEPLOY_EOF'
+          #!/bin/bash
+          set -e
+
+          echo "========================================"
+          echo "DEPLOYING FOOD PARK"
+          echo "========================================"
+          echo "Tag: $IMAGE_TAG"
+          echo "Backend changed: $BACKEND_CHANGED"
+          echo "Frontend changed: $FRONTEND_CHANGED"
+          echo "Backend image: $BACKEND_IMAGE"
+          echo "Frontend image: $FRONTEND_IMAGE"
+          echo "Commit: ${COMMIT_SHA:0:8}"
+          echo ""
+
+          cd /opt/foodpark/compose
+
+          echo "1. Pulling changed images..."
+          if [ "$BACKEND_CHANGED" = "true" ]; then
+            docker pull "$BACKEND_IMAGE"
+          else
+            echo "Skipping backend pull"
+          fi
+
+          if [ "$FRONTEND_CHANGED" = "true" ]; then
+            docker pull "$FRONTEND_IMAGE"
+          else
+            echo "Skipping frontend pull"
+          fi
+
+          echo ""
+          echo "2. Updating .env image references..."
+
+          ENV_FILE="/opt/foodpark/compose/.env"
+          BACKUP_FILE="$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+          cp "$ENV_FILE" "$BACKUP_FILE"
+
+          if [ "$BACKEND_CHANGED" = "true" ]; then
+            if grep -q "^BACKEND_IMAGE=" "$ENV_FILE"; then
+              sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=$BACKEND_IMAGE|" "$ENV_FILE"
+            else
+              echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> "$ENV_FILE"
+            fi
+          fi
+
+          if [ "$FRONTEND_CHANGED" = "true" ]; then
+            if grep -q "^FRONTEND_IMAGE=" "$ENV_FILE"; then
+              sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=$FRONTEND_IMAGE|" "$ENV_FILE"
+            else
+              echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$ENV_FILE"
+            fi
+          fi
+
+          echo ""
+          echo "Current image config:"
+          grep "^BACKEND_IMAGE\|^FRONTEND_IMAGE" "$ENV_FILE" || true
+
+          echo ""
+          echo "3. Restarting changed services..."
+
+          if [ "$BACKEND_CHANGED" = "true" ] && [ "$FRONTEND_CHANGED" = "true" ]; then
+            docker compose up -d backend frontend
+          elif [ "$BACKEND_CHANGED" = "true" ]; then
+            docker compose up -d backend
+          elif [ "$FRONTEND_CHANGED" = "true" ]; then
+            docker compose up -d frontend
+          else
+            echo "No service changes to restart"
+          fi
+
+          echo ""
+          echo "4. Waiting for services..."
+          sleep 20
+
+          echo ""
+          echo "5. Container status:"
+          docker compose ps
+
+          echo ""
+          echo "6. Health checks..."
+
+          if [ "$BACKEND_CHANGED" = "true" ]; then
+            echo "Checking backend at localhost:8011"
+            if curl -s --max-time 10 http://127.0.0.1:8011 > /dev/null; then
+              echo "Backend is responding on 8011"
+            else
+              echo "Backend not responding yet on 8011"
+            fi
+          fi
+
+          if [ "$FRONTEND_CHANGED" = "true" ]; then
+            echo "Checking frontend at localhost:3011"
+            if curl -s --max-time 10 http://127.0.0.1:3011 > /dev/null; then
+              echo "Frontend is responding on 3011"
+            else
+              echo "Frontend not responding yet on 3011"
+            fi
+          fi
+
+          echo ""
+          echo "7. Recent logs..."
+          if [ "$BACKEND_CHANGED" = "true" ]; then
+            echo "--- Backend logs ---"
+            docker compose logs --tail=100 backend || true
+          fi
+
+          if [ "$FRONTEND_CHANGED" = "true" ]; then
+            echo "--- Frontend logs ---"
+            docker compose logs --tail=100 frontend || true
+          fi
+
+          echo ""
+          echo "========================================"
+          echo "DEPLOYMENT COMPLETED"
+          echo "========================================"
+          DEPLOY_EOF
+
+          chmod +x deploy_script.sh
+
+          ssh -i ~/.ssh/deploy_key \
+            -p ${{ env.VPS_PORT }} \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            ${{ env.VPS_USER }}@${{ env.VPS_HOST }} \
+            "IMAGE_TAG='${{ needs.generate-tag.outputs.image_tag }}' \
+             BACKEND_CHANGED='${{ needs.detect-changes.outputs.backend_changed }}' \
+             FRONTEND_CHANGED='${{ needs.detect-changes.outputs.frontend_changed }}' \
+             BACKEND_IMAGE='${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}' \
+             FRONTEND_IMAGE='${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}' \
+             COMMIT_SHA='${{ github.sha }}' \
+             bash -s" < deploy_script.sh
+
+      - name: ✅ Verify deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -p ${{ env.VPS_PORT }} \
+            -o StrictHostKeyChecking=no \
+            ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+            cd /opt/foodpark/compose
+
+            echo "Container status:"
+            docker compose ps
+
+            echo ""
+            echo "Current image values from .env:"
+            grep "^BACKEND_IMAGE\|^FRONTEND_IMAGE" /opt/foodpark/compose/.env || true
+
+            echo ""
+            echo "Backend quick check:"
+            curl -I --max-time 10 http://127.0.0.1:8011 || true
+
+            echo ""
+            echo "Frontend quick check:"
+            curl -I --max-time 10 http://127.0.0.1:3011 || true
+          EOF
+
+      - name: 📝 Deployment summary
+        run: |
+          echo "========================================"
+          echo "FOOD PARK DEPLOYMENT FINISHED"
+          echo "========================================"
+          echo "Backend changed: ${{ needs.detect-changes.outputs.backend_changed }}"
+          echo "Frontend changed: ${{ needs.detect-changes.outputs.frontend_changed }}"
+          echo "Image tag: ${{ needs.generate-tag.outputs.image_tag }}"
+          echo "VPS: ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.VPS_PORT }}"
+          echo "Compose dir: /opt/foodpark/compose"
+          echo "Backend health port: 8011"
+          echo "Frontend health port: 3011"
+
+  no-changes:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any_changed != 'true'
+
+    steps:
+      - name: ℹ️ No backend/frontend changes
+        run: |
+          echo "No changes detected in backend/ or frontend/."
+          echo "Skipping build and deployment."
