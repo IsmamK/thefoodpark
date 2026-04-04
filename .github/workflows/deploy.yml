@@ -176,7 +176,7 @@ jobs:
 
           echo ""
           echo "3. Restarting both services..."
-          docker compose up -d backend frontend
+          docker-compose up -d backend frontend
 
           echo ""
           echo "4. Waiting for services..."
@@ -184,7 +184,7 @@ jobs:
 
           echo ""
           echo "5. Container status:"
-          docker compose ps
+          docker-compose ps
 
           echo ""
           echo "6. Health checks..."
@@ -206,10 +206,10 @@ jobs:
           echo ""
           echo "7. Recent logs..."
           echo "--- Backend logs ---"
-          docker compose logs --tail=100 backend || true
+          docker-compose logs --tail=100 backend || true
 
           echo "--- Frontend logs ---"
-          docker compose logs --tail=100 frontend || true
+          docker-compose logs --tail=100 frontend || true
 
           echo ""
           echo "========================================"
@@ -239,7 +239,7 @@ jobs:
             cd /opt/foodpark/compose
 
             echo "Container status:"
-            docker compose ps
+            docker-compose ps
 
             echo ""
             echo "Current image values from .env:"
