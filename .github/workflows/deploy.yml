@@ -101,8 +101,8 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
-            VITE_API_URL=https://api.thefoodpark.com
-            VITE_APP_URL=https://thefoodpark.com
+            VITE_API_URL=https://api.swiftstorefront.com/api
+            VITE_APP_URL=https://swiftstorefront.com
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
