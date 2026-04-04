@@ -24,45 +24,8 @@ env:
   VPS_BACKEND_ENV: /opt/foodpark/env/backend.env
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      backend_changed: ${{ steps.filter.outputs.backend }}
-      frontend_changed: ${{ steps.filter.outputs.frontend }}
-      any_changed: ${{ steps.any.outputs.any_changed }}
-
-    steps:
-      - name: 📦 Checkout code
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
-        with:
-          fetch-depth: 2
-
-      - name: 🔍 Detect backend/frontend changes
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            backend:
-              - 'backend/**'
-            frontend:
-              - 'frontend/**'
-
-      - name: 🧾 Summarize detected changes
-        id: any
-        run: |
-          echo "Backend changed: ${{ steps.filter.outputs.backend }}"
-          echo "Frontend changed: ${{ steps.filter.outputs.frontend }}"
-
-          if [ "${{ steps.filter.outputs.backend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
-            echo "any_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "any_changed=false" >> $GITHUB_OUTPUT
-          fi
-
   generate-tag:
     runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_changed == 'true'
     outputs:
       image_tag: ${{ steps.generate-tag.outputs.tag }}
 
@@ -78,8 +41,7 @@ jobs:
 
   build-backend:
     runs-on: ubuntu-latest
-    needs: [detect-changes, generate-tag]
-    if: needs.detect-changes.outputs.backend_changed == 'true'
+    needs: generate-tag
 
     steps:
       - name: 📦 Checkout code
@@ -111,8 +73,7 @@ jobs:
 
   build-frontend:
     runs-on: ubuntu-latest
-    needs: [detect-changes, generate-tag]
-    if: needs.detect-changes.outputs.frontend_changed == 'true'
+    needs: generate-tag
 
     steps:
       - name: 📦 Checkout code
@@ -147,8 +108,7 @@ jobs:
 
   deploy-vps:
     runs-on: ubuntu-latest
-    needs: [detect-changes, generate-tag, build-backend, build-frontend]
-    if: needs.detect-changes.outputs.any_changed == 'true'
+    needs: [generate-tag, build-backend, build-frontend]
 
     steps:
       - name: 📦 Checkout code
@@ -180,8 +140,6 @@ jobs:
           echo "DEPLOYING FOOD PARK"
           echo "========================================"
           echo "Tag: $IMAGE_TAG"
-          echo "Backend changed: $BACKEND_CHANGED"
-          echo "Frontend changed: $FRONTEND_CHANGED"
           echo "Backend image: $BACKEND_IMAGE"
           echo "Frontend image: $FRONTEND_IMAGE"
           echo "Commit: ${COMMIT_SHA:0:8}"
@@ -189,18 +147,9 @@ jobs:
 
           cd /opt/foodpark/compose
 
-          echo "1. Pulling changed images..."
-          if [ "$BACKEND_CHANGED" = "true" ]; then
-            docker pull "$BACKEND_IMAGE"
-          else
-            echo "Skipping backend pull"
-          fi
-
-          if [ "$FRONTEND_CHANGED" = "true" ]; then
-            docker pull "$FRONTEND_IMAGE"
-          else
-            echo "Skipping frontend pull"
-          fi
+          echo "1. Pulling images..."
+          docker pull "$BACKEND_IMAGE"
+          docker pull "$FRONTEND_IMAGE"
 
           echo ""
           echo "2. Updating .env image references..."
@@ -209,20 +158,16 @@ jobs:
           BACKUP_FILE="$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
           cp "$ENV_FILE" "$BACKUP_FILE"
 
-          if [ "$BACKEND_CHANGED" = "true" ]; then
-            if grep -q "^BACKEND_IMAGE=" "$ENV_FILE"; then
-              sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=$BACKEND_IMAGE|" "$ENV_FILE"
-            else
-              echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> "$ENV_FILE"
-            fi
+          if grep -q "^BACKEND_IMAGE=" "$ENV_FILE"; then
+            sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=$BACKEND_IMAGE|" "$ENV_FILE"
+          else
+            echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> "$ENV_FILE"
           fi
 
-          if [ "$FRONTEND_CHANGED" = "true" ]; then
-            if grep -q "^FRONTEND_IMAGE=" "$ENV_FILE"; then
-              sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=$FRONTEND_IMAGE|" "$ENV_FILE"
-            else
-              echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$ENV_FILE"
-            fi
+          if grep -q "^FRONTEND_IMAGE=" "$ENV_FILE"; then
+            sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=$FRONTEND_IMAGE|" "$ENV_FILE"
+          else
+            echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$ENV_FILE"
           fi
 
           echo ""
@@ -230,17 +175,8 @@ jobs:
           grep "^BACKEND_IMAGE\|^FRONTEND_IMAGE" "$ENV_FILE" || true
 
           echo ""
-          echo "3. Restarting changed services..."
-
-          if [ "$BACKEND_CHANGED" = "true" ] && [ "$FRONTEND_CHANGED" = "true" ]; then
-            docker compose up -d backend frontend
-          elif [ "$BACKEND_CHANGED" = "true" ]; then
-            docker compose up -d backend
-          elif [ "$FRONTEND_CHANGED" = "true" ]; then
-            docker compose up -d frontend
-          else
-            echo "No service changes to restart"
-          fi
+          echo "3. Restarting both services..."
+          docker compose up -d backend frontend
 
           echo ""
           echo "4. Waiting for services..."
@@ -253,35 +189,27 @@ jobs:
           echo ""
           echo "6. Health checks..."
 
-          if [ "$BACKEND_CHANGED" = "true" ]; then
-            echo "Checking backend at localhost:8011"
-            if curl -s --max-time 10 http://127.0.0.1:8011 > /dev/null; then
-              echo "Backend is responding on 8011"
-            else
-              echo "Backend not responding yet on 8011"
-            fi
+          echo "Checking backend at localhost:8011"
+          if curl -s --max-time 10 http://127.0.0.1:8011 > /dev/null; then
+            echo "✓ Backend is responding on 8011"
+          else
+            echo "✗ Backend not responding yet on 8011"
           fi
 
-          if [ "$FRONTEND_CHANGED" = "true" ]; then
-            echo "Checking frontend at localhost:3011"
-            if curl -s --max-time 10 http://127.0.0.1:3011 > /dev/null; then
-              echo "Frontend is responding on 3011"
-            else
-              echo "Frontend not responding yet on 3011"
-            fi
+          echo "Checking frontend at localhost:3011"
+          if curl -s --max-time 10 http://127.0.0.1:3011 > /dev/null; then
+            echo "✓ Frontend is responding on 3011"
+          else
+            echo "✗ Frontend not responding yet on 3011"
           fi
 
           echo ""
           echo "7. Recent logs..."
-          if [ "$BACKEND_CHANGED" = "true" ]; then
-            echo "--- Backend logs ---"
-            docker compose logs --tail=100 backend || true
-          fi
+          echo "--- Backend logs ---"
+          docker compose logs --tail=100 backend || true
 
-          if [ "$FRONTEND_CHANGED" = "true" ]; then
-            echo "--- Frontend logs ---"
-            docker compose logs --tail=100 frontend || true
-          fi
+          echo "--- Frontend logs ---"
+          docker compose logs --tail=100 frontend || true
 
           echo ""
           echo "========================================"
@@ -297,8 +225,6 @@ jobs:
             -o ConnectTimeout=30 \
             ${{ env.VPS_USER }}@${{ env.VPS_HOST }} \
             "IMAGE_TAG='${{ needs.generate-tag.outputs.image_tag }}' \
-             BACKEND_CHANGED='${{ needs.detect-changes.outputs.backend_changed }}' \
-             FRONTEND_CHANGED='${{ needs.detect-changes.outputs.frontend_changed }}' \
              BACKEND_IMAGE='${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}' \
              FRONTEND_IMAGE='${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.generate-tag.outputs.image_tag }}' \
              COMMIT_SHA='${{ github.sha }}' \
@@ -333,21 +259,8 @@ jobs:
           echo "========================================"
           echo "FOOD PARK DEPLOYMENT FINISHED"
           echo "========================================"
-          echo "Backend changed: ${{ needs.detect-changes.outputs.backend_changed }}"
-          echo "Frontend changed: ${{ needs.detect-changes.outputs.frontend_changed }}"
           echo "Image tag: ${{ needs.generate-tag.outputs.image_tag }}"
           echo "VPS: ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.VPS_PORT }}"
           echo "Compose dir: /opt/foodpark/compose"
           echo "Backend health port: 8011"
           echo "Frontend health port: 3011"
-
-  no-changes:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_changed != 'true'
-
-    steps:
-      - name: ℹ️ No backend/frontend changes
-        run: |
-          echo "No changes detected in backend/ or frontend/."
-          echo "Skipping build and deployment."
