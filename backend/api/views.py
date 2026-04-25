@@ -28,10 +28,27 @@ from django.http import JsonResponse
 from .models import Product
 
 
-class ProductListView(generics.ListAPIView):
-    queryset = Product.objects.all()
+# foodpark/views.py
+
+class ProductListView(generics.ListCreateAPIView):
+    queryset = Product.objects.select_related('sub_category')\
+        .prefetch_related('discounts').all()  # Optimize query using select_related and prefetch_related
     serializer_class = ProductSerializer
 
+    # You can further optimize this by applying filters on the database directly.
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Apply filters
+        is_active = self.request.query_params.get('is_active', None)
+        sub_category = self.request.query_params.get('sub_category', None)
+
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active)
+        if sub_category:
+            queryset = queryset.filter(sub_category_id=sub_category)
+
+        return queryset
 
 class Categories(generics.ListCreateAPIView):
     queryset = Category.objects.all()
@@ -126,6 +143,7 @@ class AllOrders(generics.ListCreateAPIView):
         if order.status == 'placed':
             capi = FacebookCAPI()
             capi.send_purchase(self.request, order)
+# foodpark/views.py
 
 class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()
@@ -134,28 +152,23 @@ class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         data = request.data
-        
-        # Handle discount code update
+
+        # Apply discount code efficiently
         if 'discount_code' in data:
+            discount_code = data.get('discount_code')
             try:
-                discount = Discount.objects.get(code__iexact=data['discount_code'])
+                discount = Discount.objects.get(code__iexact=discount_code)
                 instance.discount = discount
                 data.pop('discount_code')
             except Discount.DoesNotExist:
-                return Response(
-                    {"error": "Invalid discount code"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                        
-        
+                return Response({"error": "Invalid discount code"}, status=status.HTTP_400_BAD_REQUEST)
+
         # Update other fields
         serializer = self.get_serializer(instance, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
         return Response(serializer.data)
-    
-    
 # --------------------------------------- OrderItems ---------------------------------------
 
 class AllOrderItems(generics.ListCreateAPIView):
@@ -185,90 +198,63 @@ from rest_framework import status
 from django.utils import timezone
 from .models import Discount, Product  # Make sure to import Product
 from decimal import Decimal
+# foodpark/views.py
 
 class ApplyDiscountView(APIView):
     def post(self, request, *args, **kwargs):
         discount_code = request.data.get('discount_code')
         cart_items = request.data.get('cart_items', [])
-        
+
         if not cart_items:
             return Response({"error": "No items in cart"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             # Calculate subtotal using Decimal
             subtotal = sum(Decimal(str(item['price'])) * int(item['quantity']) for item in cart_items)
             discount_amount = Decimal('0')
-            
+
             if discount_code:
-                try:
-                    # Get active discount
-                    discount = Discount.objects.get(
-                        code__iexact=discount_code,
-                        start_date__lte=timezone.now(),
-                        end_date__gte=timezone.now()
-                    )
-                    
-                    # Get product IDs from cart
-                    product_ids = [item['id'] for item in cart_items]
-                    
-                    # Get applicable products
-                    applicable_products = Product.objects.filter(id__in=product_ids)
-                    
-                    # Filter products that match discount conditions
+                # Get active discount, filter products at the database level
+                discount = Discount.objects.filter(
+                    code__iexact=discount_code,
+                    start_date__lte=timezone.now(),
+                    end_date__gte=timezone.now()
+                ).first()
+
+                if discount:
+                    # Get applicable products based on the discount's conditions
+                    applicable_products = Product.objects.filter(id__in=[item['id'] for item in cart_items])
+
+                    # Apply product-related filters
                     if discount.products.exists():
-                        applicable_products = applicable_products.filter(
-                            id__in=discount.products.values_list('id', flat=True)
-                        )
-                    elif discount.subcategories.exists():
-                        applicable_products = applicable_products.filter(
-                            sub_category__in=discount.subcategories.all()
-                        )
-                    elif discount.categories.exists():
-                        applicable_products = applicable_products.filter(
-                            sub_category__parent_category__in=discount.categories.all()
-                        )
-                    
+                        applicable_products = applicable_products.filter(id__in=discount.products.values_list('id', flat=True))
+                    if discount.subcategories.exists():
+                        applicable_products = applicable_products.filter(sub_category__in=discount.subcategories.all())
+                    if discount.categories.exists():
+                        applicable_products = applicable_products.filter(sub_category__parent_category__in=discount.categories.all())
+
                     if applicable_products.exists():
-                        # Calculate discount for applicable items
-                        applicable_items = [
-                            item for item in cart_items 
-                            if item['id'] in [p.id for p in applicable_products]
-                        ]
+                        applicable_items = [item for item in cart_items if item['id'] in applicable_products.values_list('id', flat=True)]
                         
                         if discount.is_percentage:
-                            applicable_total = sum(
-                                Decimal(str(item['price'])) * int(item['quantity']) 
-                                for item in applicable_items
-                            )
+                            applicable_total = sum(Decimal(str(item['price'])) * int(item['quantity']) for item in applicable_items)
                             discount_amount = applicable_total * (discount.amount / Decimal('100'))
                         else:
                             total_quantity = sum(int(item['quantity']) for item in applicable_items)
                             discount_amount = discount.amount * total_quantity
                     else:
-                        return Response(
-                            {"error": "Discount not applicable to any items in cart"},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                        
-                except Discount.DoesNotExist:
-                    return Response(
-                        {"error": "Invalid or expired discount code"},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-            
+                        return Response({"error": "Discount not applicable to any items in cart"}, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    return Response({"error": "Invalid or expired discount code"}, status=status.HTTP_404_NOT_FOUND)
+
             return Response({
                 "discount_amount": str(discount_amount),
                 "subtotal": str(subtotal),
                 "grand_total": str(subtotal - discount_amount)
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 # end
 
 # CAPI
@@ -290,56 +276,45 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# foodpark/views.py
+
 @api_view(['POST'])
 def track_view_content(request):
-    try:
-        product_data = request.data.get('product')
-        if not product_data:
-            return Response({'error': 'Product data required', 'debug': None}, status=400)
-            
-        if not isinstance(product_data, dict):
-            return Response({'error': 'Product data must be a dictionary', 'debug': None}, status=400)
-            
-        required_fields = ['id', 'title', 'price']
-        if not all(field in product_data for field in required_fields):
-            return Response({
-                'error': f'Missing required product fields: {required_fields}',
-                'debug': None
-            }, status=400)
-            
-        if isinstance(product_data['price'], (int, float)):
-            product_data['price'] = str(product_data['price'])
-            
-        product_data.setdefault('user_email', None)
-        product_data.setdefault('user_phone', None)
-        product_data.setdefault('currency', 'BDT')
-        
-        capi = FacebookCAPI()
-        result = capi.send_view_content(request, product_data)
+    product_data = request.data.get('product')
+    if not product_data:
+        return Response({'error': 'Product data required'}, status=400)
 
-        # Enhanced response with debugging info
-        response_data = {
-            'status': 'success' if not result.get('error') else 'error',
-            'event': 'ViewContent',
-            'event_id': result.get('event_id'),
-            'facebook_response': result.get('facebook_response'),
-            'matched_parameters': result.get('matched_parameters'),
-            'sent_payload': result.get('sent_payload'),
-            'error': result.get('error'),
+    required_fields = ['id', 'title', 'price']
+    if not all(field in product_data for field in required_fields):
+        return Response({'error': 'Missing required product fields'}, status=400)
+
+    # Efficiently handle product price and other details
+    product_price = float(product_data.get('price', 0))
+    product_data.setdefault('currency', 'BDT')
+
+    event_data = {
+        'event_name': 'ViewContent',
+        'event_time': int(timezone.now().timestamp()),
+        'event_source_url': request.build_absolute_uri(),
+        'user_data': {
+            'client_ip_address': request.META.get('REMOTE_ADDR'),
+            'client_user_agent': request.META.get('HTTP_USER_AGENT'),
+            'em': product_data.get('user_email'),
+            'ph': product_data.get('user_phone'),
+        },
+        'custom_data': {
+            'content_name': product_data.get('title'),
+            'content_ids': [product_data.get('id')],
+            'content_type': 'product',
+            'currency': product_data.get('currency'),
+            'value': product_price,
         }
-        
-        return Response(response_data)
-        
-    except Exception as e:
-        logger.error(f"Error in track_view_content: {str(e)}", exc_info=True)
-        return Response({
-            'error': str(e),
-            'status': 'error',
-            'facebook_response': None,
-            'debug': None
-        }, status=500)
+    }
 
+    # Send the event in the background
+    send_facebook_event.delay(event_data)
 
+    return Response({'status': 'success'})
 @api_view(['POST'])
 def track_add_to_cart(request):
     try:

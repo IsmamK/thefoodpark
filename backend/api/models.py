@@ -5,9 +5,9 @@ User = get_user_model()
 
 
 class Category(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True) 
     is_active = models.BooleanField(default=True)
-    priority = models.IntegerField()
+    priority = models.IntegerField(db_index=True)
     image = models.ImageField(null=True,blank=True)
     description = models.TextField(null=True,blank=True)
     cover = models.ImageField(null=True,blank=True)
