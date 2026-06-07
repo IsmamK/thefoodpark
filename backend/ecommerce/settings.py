@@ -24,9 +24,9 @@ ALLOWED_HOSTS = os.getenv(
     "thefoodpark.xyz,www.thefoodpark.xyz,31.97.71.239,localhost,127.0.0.1"
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [
-    "https://swiftstorefront.com",
-    "https://www.swiftstorefront.com",
-    "https://api.swiftstorefront.com",
+    "https://thefoodpark.xyz",
+    "https://www.thefoodpark.xyz",
+    "https://api.thefoodpark.xyz",
 ]
 
 # ===============================
