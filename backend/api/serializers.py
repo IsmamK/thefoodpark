@@ -34,54 +34,89 @@ class DiscountSerializer(serializers.ModelSerializer):
         model = Discount
         fields = '__all__'
 
+
+
+# Add ExpenseSerializer
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = '__all__'
+
+# serializers.py - CLEAN VERSION
+
 class OrderItemSerializer(serializers.ModelSerializer):
-    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
-    product_name = serializers.CharField(source='product.title', read_only=True)
-    price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
-    
+    # Make product optional (for custom items without product ID)
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(), 
+        required=False, 
+        allow_null=True
+    )
+    product_name = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = OrderItem
         fields = ['id', 'order', 'product', 'product_name', 'price', 'quantity']
         extra_kwargs = {
-            'order': {'required': False}
+            'order': {'required': False},
         }
 
+    def get_product_name(self, obj):
+        return obj.product_name or (obj.product.title if obj.product else '')
 
 
-# serializers.py
 class OrderSerializer(serializers.ModelSerializer):
+    order_items = OrderItemSerializer(many=True, required=False, write_only=True)
+
     class Meta:
         model = Order
         fields = '__all__'
-        extra_kwargs = {
-            'email': {
-                'required': False,
-                'allow_blank': True,
-                'default': ''
-            }
-        }
 
-    def validate(self, data):
-        # Set empty string if email not provided
-        if 'email' not in data:
-            data['email'] = ''
-        return data
-    
-# class OrderSerializer(serializers.ModelSerializer):
-#     order_items = OrderItemSerializer(many=True, required=False)
-    
-
-#     class Meta:
-#         model = Order
-#         fields = '__all__'
-
-#     def create(self, validated_data):
-#         order_items_data = validated_data.pop('order_items', [])
-#         order = Order.objects.create(**validated_data)
+    def create(self, validated_data):
+        order_items_data = validated_data.pop('order_items', [])
+        order = Order.objects.create(**validated_data)
         
-#         for item_data in order_items_data:
-#             OrderItem.objects.create(order=order, **item_data)
+        for item_data in order_items_data:
+            OrderItem.objects.create(order=order, **item_data)
             
-#         return order
-
+        return order
     
+    def update(self, instance, validated_data):
+        order_items_data = validated_data.pop('order_items', None)
+        instance = super().update(instance, validated_data)
+        
+        if order_items_data is not None:
+            # Only update items if explicitly provided
+            instance.order_items.all().delete()
+            for item_data in order_items_data:
+                OrderItem.objects.create(order=instance, **item_data)
+        
+        return instance
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    order_items = OrderItemSerializer(many=True, required=False)
+
+    class Meta:
+        model = Order
+        fields = '__all__'
+
+    def create(self, validated_data):
+        order_items_data = validated_data.pop('order_items', [])
+        order = Order.objects.create(**validated_data)
+        
+        for item_data in order_items_data:
+            OrderItem.objects.create(order=order, **item_data)
+            
+        return order
+    
+    def update(self, instance, validated_data):
+        order_items_data = validated_data.pop('order_items', None)
+        instance = super().update(instance, validated_data)
+        
+        if order_items_data is not None:
+            # Clear existing items and add new ones
+            instance.order_items.all().delete()
+            for item_data in order_items_data:
+                OrderItem.objects.create(order=instance, **item_data)
+        
+        return instance

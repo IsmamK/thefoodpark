@@ -23,7 +23,7 @@ from django.views.static import serve
 from django.conf import settings 
 from django.conf.urls.static import static
 from django.urls import re_path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
 
 
 from django.urls import path, re_path

@@ -167,70 +167,78 @@ const Checkout = () => {
     }
   };
 
-  const saveCustomerInfo = async () => {
-    try {
-      const orderData = {
-        name: formData.name,
-        phone_number: formData.phone,
-        shipping_address: formData.address,
-        email: formData.email || '',
-        subtotal: orderSummary.subtotal,
-        grandtotal: orderSummary.total,
-        status: 'checkout',
-        order_items: cartItems.map(item => ({
-          product: item.id,
-          quantity: item.quantity,
-        })),
-      };
 
-      // Mobile-friendly fetch with timeout and retry
-      const saveWithRetry = async (retries = 3) => {
-        try {
-          const response = await Promise.race([
-            axios.post(`${apiUrl}/orders/`, orderData),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Request timeout')), 8000)
-            )
-          ]);
-          return response;
-        } catch (error) {
-          if (retries > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return saveWithRetry(retries - 1);
-          }
-          throw error;
-        }
-      };
+const saveCustomerInfo = async () => {
+  try {
+    // Ensure all prices are numbers
+    const subtotalNum = parseFloat(orderSummary.subtotal);
+    const grandtotalNum = parseFloat(orderSummary.total);
+    
+    const orderData = {
+      name: formData.name,
+      phone_number: formData.phone,
+      shipping_address: formData.address,
+      email: formData.email || '',
+      subtotal: subtotalNum,
+      grandtotal: grandtotalNum,
+      status: 'checkout',
+      order_items: cartItems.map(item => ({
+        product: item.id,  // Can be null for custom items
+        product_name: item.title,  // Always provide a name
+        price: parseFloat(item.price),
+        quantity: item.quantity
+      })),
+    };
 
-      const response = await saveWithRetry();
-      setOrderId(response.data.id);
-      
-      // Track checkout event after saving customer info
-      await trackCheckout();
-      
-      return true;
-    } catch (error) {
-      console.error('Order creation error:', error);
-      Swal.fire({
-        title: 'Connection Issue',
-        html: `
-          <div class="text-center">
-            <p class="mb-2">Failed to save your information.</p>
-            <p class="text-sm text-gray-600">Please check your internet connection and try again.</p>
-            <p class="text-xs mt-2">If problem persists, try:</p>
-            <ul class="text-xs text-left list-disc pl-5 mt-1">
-              <li>Switching to a different browser</li>
-              <li>Using a WiFi connection</li>
-              <li>Restarting the app</li>
-            </ul>
-          </div>
-        `,
-        icon: 'error',
-        confirmButtonColor: '#eab308',
-      });
-      return false;
+    console.log('Sending order data:', JSON.stringify(orderData, null, 2));
+
+    const response = await axios.post(`${apiUrl}/orders/`, orderData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 15000, // 15 second timeout
+    });
+    
+    console.log('Order created successfully:', response.data);
+    setOrderId(response.data.id);
+    
+    // Track checkout event after saving customer info
+    await trackCheckout();
+    
+    return true;
+  } catch (error) {
+    console.error('Order creation error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    
+    // Show detailed error message
+    let errorMessage = 'Failed to save your information.';
+    if (error.response?.data?.details) {
+      errorMessage = `Validation error: ${JSON.stringify(error.response.data.details)}`;
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     }
-  };
+    
+    Swal.fire({
+      title: 'Connection Issue',
+      html: `
+        <div class="text-center">
+          <p class="mb-2">${errorMessage}</p>
+          <p class="text-sm text-gray-600">Please check your information and try again.</p>
+          ${error.response?.data?.details ? 
+            `<p class="text-xs text-red-600 mt-2">${JSON.stringify(error.response.data.details)}</p>` 
+            : ''}
+        </div>
+      `,
+      icon: 'error',
+      confirmButtonColor: '#eab308',
+    });
+    return false;
+  }
+};
 
   const placeOrder = async () => {
     setIsPlacingOrder(true);
@@ -282,67 +290,197 @@ const Checkout = () => {
     }
   };
 
-  const showSuccessModal = (orderId) => {
-    Swal.fire({
-      title: `
-        <div class="flex flex-col items-center">
-          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-            <svg class="text-green-500 w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15 5.293 11.879a1 1 0 111.414-1.414L8.414 12.172l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <h3 class="text-xl sm:text-2xl font-bold text-gray-900">Order Confirmed!</h3>
-        </div>
-      `,
-      html: `
-        <div class="text-center mt-2">
-          <p class="text-gray-700 mb-4 text-sm sm:text-base">Thanks <strong>${formData.name}</strong>! Your order was placed successfully.</p>
+const SUPPORT_PHONE_DISPLAY = '01867064955';
+const SUPPORT_PHONE_CALL = '+8801867064955';
+const SUPPORT_PHONE_WHATSAPP = '8801867064955';
 
-          <div class="bg-yellow-50 rounded-xl p-3 sm:p-4 mb-4 border border-yellow-200 text-left text-xs sm:text-sm">
-            <div class="flex justify-between mb-1">
+const escapeHtml = (value = '') =>
+  String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const getOrderItemsText = () =>
+  cartItems
+    .map((item, index) => {
+      const itemTotal = (parseFloat(item.price || 0) * item.quantity).toFixed(2);
+      return `${index + 1}. ${item.title}\n   Qty: ${item.quantity}\n   Unit Price: ৳${item.price}\n   Item Total: ৳${itemTotal}`;
+    })
+    .join('\n\n');
+
+const getOrderItemsHtml = () =>
+  cartItems
+    .map((item) => {
+      const itemTotal = (parseFloat(item.price || 0) * item.quantity).toFixed(2);
+
+      return `
+        <div class="border-b border-gray-100 pb-2 mb-2 last:border-b-0 last:mb-0 last:pb-0">
+          <div class="flex justify-between gap-3">
+            <div>
+              <p class="font-semibold text-gray-900">${escapeHtml(item.title)}</p>
+              <p class="text-xs text-gray-500">Qty: ${item.quantity} × ৳${item.price}</p>
+            </div>
+            <p class="font-semibold text-gray-900 whitespace-nowrap">৳${itemTotal}</p>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+const getSupportWhatsAppMessage = (orderId) =>
+  encodeURIComponent(
+    `Hello, I need help with my order.\n\n` +
+    `Order Details:\n` +
+    `Order ID: ${orderId}\n` +
+    `Name: ${formData.name}\n` +
+    `Phone: ${formData.phone}\n` +
+    `Email: ${formData.email || 'Not provided'}\n` +
+    `Delivery Address: ${formData.address}\n\n` +
+    `Items:\n${getOrderItemsText()}\n\n` +
+    `Payment Summary:\n` +
+    `Subtotal: ৳${orderSummary.subtotal}\n` +
+    `Discount: ৳${orderSummary.discountAmount}\n` +
+    `Delivery Fee: ৳${orderSummary.deliveryFee}\n` +
+    `Grand Total: ৳${orderSummary.grandTotal}`
+  );
+
+const showSuccessModal = (orderId) => {
+  Swal.fire({
+    title: `
+      <div class="flex flex-col items-center">
+        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+          <svg class="text-green-500 w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15 5.293 11.879a1 1 0 111.414-1.414L8.414 12.172l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <h3 class="text-xl sm:text-2xl font-bold text-gray-900">Order Confirmed!</h3>
+      </div>
+    `,
+    html: `
+      <div class="text-left mt-2">
+        <p class="text-gray-700 mb-4 text-sm sm:text-base text-center">
+          Thanks <strong>${escapeHtml(formData.name)}</strong>! Your order was placed successfully.
+        </p>
+
+        <div class="bg-yellow-50 rounded-xl p-3 sm:p-4 mb-4 border border-yellow-200">
+          <h4 class="font-bold text-gray-900 mb-3 text-sm sm:text-base">Order Details</h4>
+
+          <div class="space-y-2 text-xs sm:text-sm">
+            <div class="flex justify-between gap-3">
               <span class="text-gray-600">Order ID:</span>
-              <span class="font-medium">${orderId}</span>
+              <span class="font-semibold text-gray-900">#${orderId}</span>
             </div>
-            <div class="flex justify-between mb-1">
-              <span class="text-gray-600">Total:</span>
-              <span class="font-semibold text-yellow-600">৳${orderSummary.grandTotal}</span>
+
+            <div class="flex justify-between gap-3">
+              <span class="text-gray-600">Name:</span>
+              <span class="font-semibold text-gray-900 text-right">${escapeHtml(formData.name)}</span>
             </div>
-            <div class="flex justify-between">
+
+            <div class="flex justify-between gap-3">
+              <span class="text-gray-600">Phone:</span>
+              <span class="font-semibold text-gray-900 text-right">${escapeHtml(formData.phone)}</span>
+            </div>
+
+            ${
+              formData.email
+                ? `
+                  <div class="flex justify-between gap-3">
+                    <span class="text-gray-600">Email:</span>
+                    <span class="font-semibold text-gray-900 text-right">${escapeHtml(formData.email)}</span>
+                  </div>
+                `
+                : ''
+            }
+
+            <div class="flex justify-between gap-3">
               <span class="text-gray-600">Delivery:</span>
-              <span class="text-right max-w-[150px] sm:max-w-none truncate">${formData.address}</span>
+              <span class="font-semibold text-gray-900 text-right max-w-[180px]">${escapeHtml(formData.address)}</span>
             </div>
           </div>
-
-          <div class="bg-gray-50 rounded-lg p-2 sm:p-3 mb-3 text-xs sm:text-sm">
-            <p class="text-gray-600 mb-1">We'll contact you at:</p>
-            <p class="font-medium text-gray-800">${formData.phone}</p>
-          </div>
-
-          <p class="text-xs sm:text-sm text-gray-500">Confirmation sent to: <strong>${formData.email || 'your phone'}</strong></p>
         </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: `<i class="fas fa-phone-alt mr-2"></i> Call Support`,
-      cancelButtonText: `<i class="fas fa-shopping-cart ml-2 mr-2"></i> Continue Shopping`,
-      confirmButtonColor: '#facc15',
-      cancelButtonColor: '#e5e7eb',
-      focusConfirm: false,
-      customClass: {
-        popup: 'rounded-2xl shadow-xl px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 max-w-[90vw]',
-        confirmButton: 'bg-yellow-400 text-gray-900 font-medium hover:bg-yellow-500 px-3 sm:px-4 mr-2 py-2 rounded-lg text-sm sm:text-base',
-        cancelButton: 'bg-gray-200 text-gray-800 hover:bg-gray-300 px-3 sm:px-4 py-2 ml-2 rounded-lg text-sm sm:text-base',
-        title: 'px-0',
-      },
-      buttonsStyling: false,
-      showCloseButton: true,
-    }).then((result) => {
-      if (result.isConfirmed) {
-        window.location.href = 'tel:+8801887445596';
-      } else {
-        navigate('/');
-      }
-    });
-  };
+
+        <div class="bg-white rounded-xl p-3 sm:p-4 mb-4 border border-gray-200">
+          <h4 class="font-bold text-gray-900 mb-3 text-sm sm:text-base">Items Ordered</h4>
+          <div class="max-h-52 overflow-y-auto pr-1 text-xs sm:text-sm">
+            ${getOrderItemsHtml()}
+          </div>
+        </div>
+
+        <div class="bg-gray-50 rounded-xl p-3 sm:p-4 mb-4 border border-gray-200">
+          <h4 class="font-bold text-gray-900 mb-3 text-sm sm:text-base">Payment Summary</h4>
+
+          <div class="space-y-2 text-xs sm:text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-600">Subtotal</span>
+              <span class="font-medium">৳${orderSummary.subtotal}</span>
+            </div>
+
+            ${
+              parseFloat(orderSummary.discountAmount) > 0
+                ? `
+                  <div class="flex justify-between text-green-600">
+                    <span>Discount</span>
+                    <span class="font-medium">-৳${orderSummary.discountAmount}</span>
+                  </div>
+                `
+                : ''
+            }
+
+            <div class="flex justify-between">
+              <span class="text-gray-600">Delivery Fee</span>
+              <span class="font-medium">৳${orderSummary.deliveryFee}</span>
+            </div>
+
+            <div class="border-t border-gray-200 pt-2 mt-2 flex justify-between">
+              <span class="font-bold text-gray-900">Grand Total</span>
+              <span class="font-bold text-yellow-600">৳${orderSummary.grandTotal}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+          <p class="text-xs sm:text-sm text-green-700">
+            We will contact you at <strong>${escapeHtml(formData.phone)}</strong> to confirm delivery.
+          </p>
+        </div>
+      </div>
+    `,
+    showCancelButton: true,
+showDenyButton: true,
+
+confirmButtonText: `WhatsApp Us`,
+denyButtonText: `Call Us`,
+cancelButtonText: `Continue Shopping`,
+
+confirmButtonColor: '#22c55e',
+denyButtonColor: '#facc15',
+cancelButtonColor: '#e5e7eb',
+    focusConfirm: false,
+    customClass: {
+      popup: 'rounded-2xl shadow-xl px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 max-w-[94vw] sm:max-w-lg',
+confirmButton: 'bg-green-500 text-white font-medium hover:bg-green-600 px-3 sm:px-4 mr-2 py-2 rounded-lg text-sm sm:text-base',
+denyButton: 'bg-yellow-400 text-gray-900 font-medium hover:bg-yellow-500 px-3 sm:px-4 mx-2 py-2 rounded-lg text-sm sm:text-base',
+cancelButton: 'bg-gray-200 text-gray-800 hover:bg-gray-300 px-3 sm:px-4 py-2 ml-2 rounded-lg text-sm sm:text-base',
+      title: 'px-0',
+      htmlContainer: 'mx-0',
+    },
+    buttonsStyling: false,
+    showCloseButton: true,
+ }).then((result) => {
+  if (result.isConfirmed) {
+    window.open(
+      `https://wa.me/${SUPPORT_PHONE_WHATSAPP}?text=${getSupportWhatsAppMessage(orderId)}`,
+      '_blank'
+    );
+  } else if (result.isDenied) {
+    window.location.href = `tel:${SUPPORT_PHONE_CALL}`;
+  } else if (result.isDismissed) {
+    navigate('/');
+  }
+});
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();

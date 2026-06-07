@@ -48,6 +48,10 @@ urlpatterns = [
 
     path('products/featured/', views.FeaturedProductListView.as_view(), name='featured-products'),
 
+    path('expenses/', views.AllExpenses.as_view(), name='expense-list'),
+path('expenses/<int:pk>/', views.SingleExpense.as_view(), name='expense-detail'),
+path('customer-history/', views.CustomerOrderHistory.as_view(), name='customer-history'),
+
 
 
 ]

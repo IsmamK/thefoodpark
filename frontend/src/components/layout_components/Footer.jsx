@@ -2,6 +2,7 @@ import {
   FaHome,
   FaPhone,
   FaShoppingCart,
+  FaWhatsapp,
 } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
@@ -47,11 +48,22 @@ const Footer = () => {
           )}
         </Link>
 
-        {/* Call */}
-        <a href="tel:+8801887445596" className="flex flex-col items-center text-gray-900 hover:text-yellow-500 transition">
-          <FaPhone className="w-5 h-5 mb-1" />
-          <span className="text-xs font-medium">Call</span>
-        </a>
+     {/* Call */}
+<a href="tel:+8801867064955" className="flex flex-col items-center text-gray-900 hover:text-yellow-500 transition">
+  <FaPhone className="w-5 h-5 mb-1" />
+  <span className="text-xs font-medium">Call</span>
+</a>
+
+{/* WhatsApp */}
+<a
+  href="https://wa.me/8801867064955?text=Hello%2C%20I%20would%20like%20to%20place%20an%20order."
+  target="_blank"
+  rel="noopener noreferrer"
+  className="flex flex-col items-center text-gray-900 hover:text-green-500 transition"
+>
+  <FaWhatsapp className="w-5 h-5 mb-1 text-green-500" />
+  <span className="text-xs font-medium">WhatsApp</span>
+</a>
       </nav>
     </div>
   );

@@ -121,6 +121,8 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 # --------------------------------------- Orders ---------------------------------------
 
 
+# views.py - Updated AllOrders
+
 class AllOrders(generics.ListCreateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
@@ -135,14 +137,25 @@ class AllOrders(generics.ListCreateAPIView):
             queryset = queryset.filter(status__in=statuses)
         return queryset
     
-    def perform_create(self, serializer):
-        client_ip = self.request.META.get('REMOTE_ADDR')
-        order = serializer.save(client_ip_address=client_ip)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         
-        # Track purchase event
-        if order.status == 'placed':
-            capi = FacebookCAPI()
-            capi.send_purchase(self.request, order)
+        if not serializer.is_valid():
+            # Return detailed error message for debugging
+            return Response({
+                'error': 'Validation failed',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            client_ip = request.META.get('REMOTE_ADDR')
+            order = serializer.save(client_ip_address=client_ip)
+            return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
 # foodpark/views.py
 
 class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
@@ -174,6 +187,8 @@ class SingleOrder(generics.RetrieveUpdateDestroyAPIView):
 class AllOrderItems(generics.ListCreateAPIView):
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['order']
    
 
 class SingleOrderItem(generics.RetrieveUpdateDestroyAPIView):
@@ -508,3 +523,41 @@ class FeaturedProductListView(generics.ListAPIView):
     
 
 
+# Add these views
+
+class AllExpenses(generics.ListCreateAPIView):
+    queryset = Expense.objects.all()
+    serializer_class = ExpenseSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['category']
+    ordering_fields = ['date', 'amount']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            qs = qs.filter(date__year=year)
+        if month:
+            qs = qs.filter(date__month=month)
+        return qs
+
+class SingleExpense(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Expense.objects.all()
+    serializer_class = ExpenseSerializer
+
+# Customer history by phone number
+class CustomerOrderHistory(APIView):
+    def get(self, request):
+        phone = request.query_params.get('phone')
+        if not phone:
+            return Response({'error': 'phone required'}, status=400)
+        orders = Order.objects.filter(phone_number=phone).order_by('-order_time')
+        # Serialize with nested order items
+        orders_data = []
+        for order in orders:
+            order_data = OrderSerializer(order).data
+            items = OrderItem.objects.filter(order=order)
+            order_data['order_items'] = OrderItemSerializer(items, many=True).data
+            orders_data.append(order_data)
+        return Response({'count': orders.count(), 'orders': orders_data})

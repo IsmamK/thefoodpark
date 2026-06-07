@@ -33,8 +33,8 @@ const App = () => {
       path: '/admin',
       element: <AdminLayout></AdminLayout>,
       children: [
-        { index: true, element: <Dashboard /> },
-        {path: 'dashboard', element: <Dashboard></Dashboard>},
+        { index: true, element: <Orders /> },
+
         {path: 'orders', element: <Orders></Orders>},
         {path: 'products', element: <Products></Products>},
         {path: 'discount', element: <Discount></Discount>}

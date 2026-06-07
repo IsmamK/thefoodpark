@@ -80,9 +80,8 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="order_items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="order_items")
     quantity = models.PositiveIntegerField(default=1)
-    
-    def __str__(self):
-        return f"{self.quantity} x {self.product.title}"
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # ADD THIS
+    product_name = models.CharField(max_length=255, blank=True, default='')  # ADD THIS (for custom items)
 
 class Banner(models.Model):
     active = models.BooleanField(default=True)
@@ -90,3 +89,21 @@ class Banner(models.Model):
 
     def __str__(self):
         return f"Banner {self.id} - {'Active' if self.active else 'Inactive'}"
+
+# Add to models.py
+
+class Expense(models.Model):
+    CATEGORY_CHOICES = [
+        ('raw_materials', 'Raw Materials'),
+        ('chef_salary', "Chef's Salary"),
+        ('ads', 'Ad Spend'),
+        ('miscellaneous', 'Miscellaneous'),
+    ]
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=255, blank=True, default='')
+    date = models.DateField()  # Use DateField so you can filter by month
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.category} - {self.amount} on {self.date}"
