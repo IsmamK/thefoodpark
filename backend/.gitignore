@@ -18,7 +18,6 @@ ENV/
 *.pot
 *.pyc
 *.pyo
-db.sqlite3
 media/
 staticfiles/
 *.mo
