@@ -9,22 +9,39 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 const NAV = [
   {
-    group: 'Main',
+    group: "Main",
     items: [
-      { name: 'orders',    icon: FiShoppingBag, label: 'Orders',     path: '/admin' },
-
-    ]
+      {
+        name: "dashboard",
+        icon: FiGrid,
+        label: "Dashboard",
+        path: "/admin",
+      },
+      {
+        name: "orders",
+        icon: FiShoppingBag,
+        label: "Orders",
+        path: "/admin/orders",
+      },
+    ],
   },
   {
-    group: 'Catalog',
+    group: "Catalog",
     items: [
-      { name: 'products',   icon: FiPackage, label: 'Products',   path: '/admin/products' },
-      { name: 'categories', icon: FiGrid,    label: 'Categories', path: '/admin/categories' },
-      { name: 'discounts',  icon: FiTag,     label: 'Discounts',  path: '/admin/discounts' },
-      { name: 'banners',    icon: FiImage,   label: 'Banners',    path: '/admin/banners' },
-    ]
+      {
+        name: "products",
+        icon: FiPackage,
+        label: "Products",
+        path: "/admin/products",
+      },
+      {
+        name: "discounts",
+        icon: FiTag,
+        label: "Discounts",
+        path: "/admin/discount",
+      },
+    ],
   },
-
 ];
 
 const AdminLayout = () => {
@@ -51,7 +68,7 @@ const AdminLayout = () => {
       ? location.pathname === '/admin'
       : location.pathname.startsWith(i.path)
   );
-  const activeLabel = activeItem?.label ?? 'Orders';
+const activeLabel = activeItem?.label ?? "Dashboard";
 
   const sidebarW = isMobile ? 240 : collapsed ? 64 : 220;
 

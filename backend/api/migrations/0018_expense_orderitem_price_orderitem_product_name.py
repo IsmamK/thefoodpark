@@ -10,22 +10,37 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.CreateModel(
-            name='Expense',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('category', models.CharField(choices=[('raw_materials', 'Raw Materials'), ('chef_salary', "Chef's Salary"), ('ads', 'Ad Spend'), ('miscellaneous', 'Miscellaneous')], max_length=50)),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=12)),
-                ('description', models.CharField(blank=True, default='', max_length=255)),
-                ('date', models.DateField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.CreateModel(
+                    name='Expense',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('category', models.CharField(
+                            choices=[
+                                ('raw_materials', 'Raw Materials'),
+                                ('chef_salary', "Chef's Salary"),
+                                ('ads', 'Ad Spend'),
+                                ('miscellaneous', 'Miscellaneous')
+                            ],
+                            max_length=50
+                        )),
+                        ('amount', models.DecimalField(decimal_places=2, max_digits=12)),
+                        ('description', models.CharField(blank=True, default='', max_length=255)),
+                        ('date', models.DateField()),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                    ],
+                ),
             ],
+            database_operations=[],
         ),
+
         migrations.AddField(
             model_name='orderitem',
             name='price',
             field=models.DecimalField(decimal_places=2, default=0, max_digits=10),
         ),
+
         migrations.AddField(
             model_name='orderitem',
             name='product_name',
