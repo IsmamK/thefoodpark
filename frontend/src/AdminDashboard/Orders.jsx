@@ -26,6 +26,34 @@ const fmtShort = (n) => {
   return `৳${Math.round(n || 0)}`;
 };
 
+const toNumber = (value, fallback = 0) => {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const itemLineTotal = (item) => toNumber(item?.price) * toNumber(item?.quantity, 1);
+
+const getItemsTotal = (order) =>
+  (order?.order_items || []).reduce((sum, item) => sum + itemLineTotal(item), 0);
+
+const getOrderAmounts = (order) => {
+  const savedSubtotal = Number.parseFloat(order?.subtotal);
+  const savedGrandTotal = Number.parseFloat(order?.grandtotal);
+  const itemsTotal = getItemsTotal(order);
+
+  const subtotal = Number.isFinite(savedSubtotal) ? savedSubtotal : itemsTotal;
+  const grandtotal = Number.isFinite(savedGrandTotal) ? savedGrandTotal : subtotal;
+
+  // Delivery is derived from saved backend totals only.
+  // We never add a new hardcoded delivery charge while copying or displaying an order.
+  const deliveryCharge = Math.max(0, grandtotal - subtotal);
+
+  return { subtotal, deliveryCharge, grandtotal, itemsTotal };
+};
+
+const fmtPlainBDT = (value) => `BDT ${toNumber(value).toFixed(2)}`;
+
+
 const STATUS_META = {
   placed:    { label: 'Placed',      dot: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
   checkout:  { label: 'Checked Out', dot: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 ring-blue-200' },
@@ -153,6 +181,7 @@ const CustomerHistoryModal = ({ phone, name, onClose, apiUrl }) => {
         <div className="flex flex-col gap-1.5">
           {orders.map(o => {
             const isExp = expandedOrder === o.id;
+            const amounts = getOrderAmounts(o);
             return (
               <div key={o.id} className="border border-gray-100 rounded-xl overflow-hidden">
                 <div
@@ -204,16 +233,16 @@ const CustomerHistoryModal = ({ phone, name, onClose, apiUrl }) => {
                         )}
                         <div className="bg-white rounded-lg p-3 flex flex-col gap-1.5 border border-gray-100">
                           <div className="flex justify-between text-xs text-gray-500">
-                            <span>Order Value</span>
-                            <span className="font-semibold text-gray-700">{fmt(o.grandtotal)}</span>
+                            <span>Items Subtotal</span>
+                            <span className="font-semibold text-gray-700">{fmt(amounts.subtotal)}</span>
                           </div>
                           <div className="flex justify-between text-xs text-gray-500">
                             <span>Delivery Charge</span>
-                            <span className="font-semibold text-gray-700">{fmt(100)}</span>
+                            <span className="font-semibold text-gray-700">{fmt(amounts.deliveryCharge)}</span>
                           </div>
                           <div className="flex justify-between text-xs font-black text-gray-900 border-t border-gray-100 pt-1.5 mt-0.5">
                             <span>Total Bill</span>
-                            <span>{fmt(parseFloat(o.grandtotal || 0))}</span>
+                            <span>{fmt(amounts.grandtotal)}</span>
                           </div>
                         </div>
                         {o.shipping_address && (
@@ -785,7 +814,7 @@ const FinanceTab = ({ apiUrl }) => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const metrics = useMemo(() => {
-    const sales = deliveredOrders.reduce((s, o) => s + parseFloat(o.grandtotal || 0) - 100, 0);
+    const sales = deliveredOrders.reduce((s, o) => s + getOrderAmounts(o).subtotal, 0);
     const rawMat = expenses.filter(e => e.category === 'raw_materials').reduce((s, e) => s + parseFloat(e.amount), 0);
     const adSpend = expenses.filter(e => e.category === 'ads').reduce((s, e) => s + parseFloat(e.amount), 0);
     const chefSalary = expenses.filter(e => e.category === 'chef_salary').reduce((s, e) => s + parseFloat(e.amount), 0);
@@ -845,7 +874,7 @@ const FinanceTab = ({ apiUrl }) => {
       const key = o.phone_number;
       if (!custMap[key]) custMap[key] = { name: o.name, phone: o.phone_number, orders: 0, revenue: 0 };
       custMap[key].orders += 1;
-      custMap[key].revenue += parseFloat(o.grandtotal || 0) - 100;
+      custMap[key].revenue += getOrderAmounts(o).subtotal;
     });
     const topCustomers = Object.values(custMap).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
 
@@ -1270,7 +1299,7 @@ const Orders = () => {
     const items = {};
     let total = 0;
     filteredOrders.forEach(o => {
-      total += parseFloat(o.grandtotal || 0) - 100;
+      total += getOrderAmounts(o).subtotal;
       (o.order_items || []).forEach(it => {
         const name = (it.product_name && it.product_name.trim()) ? it.product_name : `Product #${it.product}`;
         if (!items[name]) items[name] = { qty: 0, val: 0 };
@@ -1289,8 +1318,10 @@ const Orders = () => {
     setNewItem({ product_name: '', price: '', quantity: 1 });
   };
   const cancelEdit = () => { setEditingOrder(null); setEditingPrices({}); };
-  const calcSubtotal = () => Object.values(editingPrices).reduce((s, p) => s + (p || 0), 0);
-  const calcGrand = () => calcSubtotal() + 100;
+  const calcSubtotal = (order) =>
+    (order.order_items || []).reduce((sum, item) =>
+      sum + toNumber(editingPrices[item.id]) * toNumber(item.quantity, 1), 0);
+  const calcGrand = (order) => calcSubtotal(order) + getOrderAmounts(order).deliveryCharge;
 
   const saveEdit = async (order) => {
     try {
@@ -1304,7 +1335,7 @@ const Orders = () => {
       );
       await fetch(`${apiUrl}/orders/${order.id}/`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subtotal: calcSubtotal(), grandtotal: calcGrand() })
+        body: JSON.stringify({ subtotal: calcSubtotal(order), grandtotal: calcGrand(order) })
       });
       Swal.fire('Saved!', 'Order updated', 'success');
       fetchOrders(activeStatus); cancelEdit();
@@ -1356,23 +1387,39 @@ const Orders = () => {
 
   const copyData = () => {
     const data = orders.filter(o => selectedOrders.includes(o.id));
+
+    if (!data.length) {
+      Swal.fire('No orders selected', 'Please select at least one order to copy.', 'warning');
+      return;
+    }
+
     const txt = data.map((o, i) => {
-      const items = (o.order_items || [])
-        .map(it => `${it.product_name || `Product #${it.product}`} (x${it.quantity})`)
-        .join(', ');
-      const orderValue = parseFloat(o.grandtotal || 0);
-      const totalBill = orderValue + 100;
+      const amounts = getOrderAmounts(o);
+      const items = (o.order_items || []);
+      const itemLines = items.length
+        ? items.map((it, idx) => {
+            const name = it.product_name?.trim() || `Product #${it.product}`;
+            const qty = toNumber(it.quantity, 1);
+            const unitPrice = toNumber(it.price);
+            return `${idx + 1}. ${name} x${qty} = ${fmtPlainBDT(unitPrice * qty)}`;
+          }).join('\n')
+        : 'No item details available';
+
       return [
-        `${i + 1})`,
-        `Customer Name: ${o.name}\n`,
-        `Phone No: ${o.phone_number}\n`,
-        `Address: ${o.shipping_address}\n`,
-        `Order Items: ${items}\n`,
-        `Order Value: BDT ${orderValue.toFixed(2)}\n`,
-        `Delivery Charge: BDT 100\n`,
-        `Total Bill: BDT ${totalBill.toFixed(2)}`,
+        `${i + 1}) Order #${o.id}`,
+        `Customer Name: ${o.name || '-'}`,
+        `Phone No: ${o.phone_number || '-'}`,
+        `Address: ${o.shipping_address || '-'}`,
+        '',
+        'Order Items:',
+        itemLines,
+        '',
+        `Items Subtotal: ${fmtPlainBDT(amounts.subtotal)}`,
+        `Delivery Charge: ${fmtPlainBDT(amounts.deliveryCharge)}`,
+        `Total Bill: ${fmtPlainBDT(amounts.grandtotal)}`,
       ].join('\n');
-    }).join('\n\n');
+    }).join('\n\n------------------------------\n\n');
+
     navigator.clipboard.writeText(txt).then(() => Swal.fire('Copied!', `${data.length} orders copied`, 'success'));
   };
 
@@ -1453,12 +1500,12 @@ const Orders = () => {
               <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm border border-gray-100">
                 <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Value</p>
                 <p className="text-xl sm:text-2xl font-black text-emerald-600">{fmtShort(orderSummary.total)}</p>
-                <p className="text-xs text-gray-400 mt-1 hidden sm:block">excl. delivery</p>
+                <p className="text-xs text-gray-400 mt-1 hidden sm:block">saved item value</p>
               </div>
               <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm border border-gray-100">
                 <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Avg</p>
                 <p className="text-xl sm:text-2xl font-black text-violet-600">{fmtShort(orderSummary.count > 0 ? orderSummary.total / orderSummary.count : 0)}</p>
-                <p className="text-xs text-gray-400 mt-1 hidden sm:block">excl. delivery</p>
+                <p className="text-xs text-gray-400 mt-1 hidden sm:block">saved item value</p>
               </div>
             </div>
 
@@ -1557,6 +1604,7 @@ const Orders = () => {
                     const repeatCount = repeatCustomers[order.phone_number] || 1;
                     const isRepeat = repeatCount > 1;
                     const na = nextAction(order.status);
+                    const amounts = getOrderAmounts(order);
 
                     return (
                       <div key={order.id} className={`order-row border-b border-gray-50 last:border-0 transition-colors duration-100 ${isSel ? 'bg-blue-50/50' : 'bg-white hover:bg-gray-50/50'}`}>
@@ -1618,16 +1666,16 @@ const Orders = () => {
                                 <div className="bg-gray-50 rounded-xl p-4">
                                   <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Order Summary</p>
                                   <div className="flex justify-between mb-2">
-                                    <span className="text-sm text-gray-500">Items Total</span>
-                                    <span className="text-sm font-semibold text-gray-700">{fmt(parseFloat(order.grandtotal) - 100)}</span>
+                                    <span className="text-sm text-gray-500">Items Subtotal</span>
+                                    <span className="text-sm font-semibold text-gray-700">{fmt(amounts.subtotal)}</span>
                                   </div>
                                   <div className="flex justify-between mb-2">
                                     <span className="text-sm text-gray-500">Delivery</span>
-                                    <span className="text-sm font-semibold text-gray-700">{fmt(100)}</span>
+                                    <span className="text-sm font-semibold text-gray-700">{fmt(amounts.deliveryCharge)}</span>
                                   </div>
                                   <div className="flex justify-between pt-2 mt-2 border-t border-gray-200">
                                     <span className="font-bold text-gray-900">Total Bill</span>
-                                    <span className="font-black text-gray-900">{fmt(order.grandtotal)}</span>
+                                    <span className="font-black text-gray-900">{fmt(amounts.grandtotal)}</span>
                                   </div>
                                   {order.shipping_address && (
                                     <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-200 flex items-start gap-1.5">
@@ -1715,7 +1763,7 @@ const Orders = () => {
                                         <tfoot>
                                           <tr className="bg-emerald-50 border-t-2 border-emerald-100">
                                             <td colSpan={3} className="px-3 py-2.5 text-sm font-bold text-emerald-800">New Total</td>
-                                            <td className="px-3 py-2.5 text-right font-black text-emerald-800">{fmt(calcGrand())}</td>
+                                            <td className="px-3 py-2.5 text-right font-black text-emerald-800">{fmt(calcGrand(order))}</td>
                                             <td />
                                           </tr>
                                         </tfoot>
