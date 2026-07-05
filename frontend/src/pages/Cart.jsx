@@ -171,6 +171,10 @@ const Cart = () => {
                       <img
                         src={item.image}
                         alt={item.title}
+                        loading="lazy"
+                        decoding="async"
+                        width="64"
+                        height="64"
                         className="h-full w-full object-cover object-center"
                       />
                     </div>

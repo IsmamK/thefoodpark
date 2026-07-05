@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ShoppingCart, ArrowLeft, Plus, Minus, X, Star, Clock, ChefHat, Snowflake } from 'lucide-react';
-import axios from 'axios';
+import { ShoppingCart, ArrowLeft, Plus, Minus, X } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { readJsonStorage } from '../utils/storage';
 
 const CategoryPage = () => {
   const { id } = useParams();
@@ -24,13 +24,18 @@ const CategoryPage = () => {
 
   // Track add to cart events
   const trackAddToCart = (product) => {
-    axios.post(`${apiUrl}/track/add_to_cart/`, {
+    fetch(`${apiUrl}/track/add_to_cart/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
       product: {
         id: product.id,
         title: product.title,
         price: product.price,
         currency: 'BDT'
       }
+      }),
     }).catch(err => {
       console.error('Error tracking add to cart:', err);
     });
@@ -38,13 +43,18 @@ const CategoryPage = () => {
 
   // Track view content events
   const trackViewContent = (product) => {
-    axios.post(`${apiUrl}/track/view_content/`, {
+    fetch(`${apiUrl}/track/view_content/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
       product: {
         id: product.id,
         title: product.title,
         price: product.price,
         currency: 'BDT'
       }
+      }),
     }).catch(err => {
       console.error('Error tracking view content:', err);
     });
@@ -52,12 +62,12 @@ const CategoryPage = () => {
 
   // Load cart items from localStorage
   useEffect(() => {
-    const items = JSON.parse(localStorage.getItem('cartItems')) || [];
-    setCartItems(items);
+    const items = readJsonStorage('cartItems', []);
+    setCartItems(Array.isArray(items) ? items : []);
     
     const handleCartUpdate = () => {
-      const updatedItems = JSON.parse(localStorage.getItem('cartItems')) || [];
-      setCartItems(updatedItems);
+      const updatedItems = readJsonStorage('cartItems', []);
+      setCartItems(Array.isArray(updatedItems) ? updatedItems : []);
     };
 
     window.addEventListener('cartUpdated', handleCartUpdate);
@@ -65,16 +75,27 @@ const CategoryPage = () => {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchData = async () => {
       try {
         const [categoryRes, subcategoriesRes] = await Promise.all([
-          axios.get(`${apiUrl}/categories/${id}/`),
-          axios.get(`${apiUrl}/subcategories/?parent_category=${id}`)
+          fetch(`${apiUrl}/categories/${id}/`, { signal: controller.signal }),
+          fetch(`${apiUrl}/subcategories/?parent_category=${id}`, { signal: controller.signal })
         ]);
 
-        setCategory(categoryRes.data);
-        setSubcategories(subcategoriesRes.data.filter(sub => sub.is_active));
+        const [categoryData, subcategoriesPayload] = await Promise.all([
+          categoryRes.ok ? categoryRes.json() : null,
+          subcategoriesRes.ok ? subcategoriesRes.json() : [],
+        ]);
+
+        setCategory(categoryData);
+        const subcategoriesData = Array.isArray(subcategoriesPayload)
+          ? subcategoriesPayload
+          : subcategoriesPayload?.results || [];
+        setSubcategories(subcategoriesData.filter(sub => sub.is_active));
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error(err);
       } finally {
         setLoading(false);
@@ -82,7 +103,8 @@ const CategoryPage = () => {
     };
 
     fetchData();
-  }, [id]);
+    return () => controller.abort();
+  }, [apiUrl, id]);
 
   const updateCart = (updatedCart) => {
     localStorage.setItem('cartItems', JSON.stringify(updatedCart));
@@ -194,6 +216,10 @@ const CategoryPage = () => {
                       <img
                         src={product.image}
                         alt={product.title}
+                        loading="lazy"
+                        decoding="async"
+                        width="128"
+                        height="128"
                         className="w-full h-full object-cover hover:scale-105 transition-transform"
                       />
                       {product.is_bestseller && (
@@ -261,6 +287,7 @@ const CategoryPage = () => {
               <img
                 src={selectedProduct.image}
                 alt={selectedProduct.title}
+                decoding="async"
                 className="w-full h-full object-contain p-8"
               />
               <button 

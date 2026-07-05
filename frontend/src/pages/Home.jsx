@@ -1,10 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, Star, Clock, Flame, ChefHat, Phone, Mail, MapPin, Facebook, Instagram, Twitter, ArrowRight, Snowflake } from 'lucide-react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
+import { ShoppingCart, Clock, ChefHat, Phone, Mail, MapPin, Facebook, Instagram, Twitter, ArrowRight, Snowflake } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 export default function FoodParkWebsite() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
   const [categories, setCategories] = useState([]);
   const apiUrl = import.meta.env.VITE_API_URL;
   const navigate = useNavigate();
@@ -15,23 +12,25 @@ const navigateToCategory = (slug) => {
 };
 
   // Your actual categories data
-    useEffect(() => {
-    axios.get(`${apiUrl}/categories/`)
-      .then(res => {
-        const activeCategories = res.data
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${apiUrl}/categories/`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        const categoryData = Array.isArray(data) ? data : data?.results || [];
+        const activeCategories = categoryData
           .filter(cat => cat.is_active)
           .sort((a, b) => a.priority - b.priority);
         setCategories(activeCategories);
-        setLoading(false);
       })
       .catch(err => {
+        if (err.name === 'AbortError') return;
         console.error(err);
-        setLoading(false);
       });
-  }, []);
-  useEffect(() => {
-    setIsVisible(true);
-  }, []);
+
+    return () => controller.abort();
+  }, [apiUrl]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -119,6 +118,10 @@ const navigateToCategory = (slug) => {
         <img
           src={category.image}
           alt={category.name}
+          loading="lazy"
+          decoding="async"
+          width="96"
+          height="96"
           className="relative z-10 w-full h-full object-contain transition-transform duration-300 group-hover:scale-110 drop-shadow-lg"
           onError={(e) => {
             e.target.src = '/api/placeholder/200/200';

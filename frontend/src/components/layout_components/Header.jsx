@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { FiShoppingCart } from "react-icons/fi";
 import { Link } from "react-router-dom";
+import { readJsonStorage } from "../../utils/storage";
 
 const Navbar = () => {
   const [cartCount, setCartCount] = useState(0);
 
   // Update cart count from localStorage
   const updateCartCount = () => {
-    const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
-    setCartCount(cartItems.length);
+    const cartItems = readJsonStorage("cartItems", []);
+    setCartCount(Array.isArray(cartItems) ? cartItems.length : 0);
   };
 
   useEffect(() => {

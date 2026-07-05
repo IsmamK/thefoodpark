@@ -4,6 +4,7 @@ import { FaTruck, FaMapMarkerAlt, FaPhone, FaUser, FaArrowRight, FaChevronLeft, 
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { readJsonStorage } from '../utils/storage';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -86,8 +87,8 @@ const Checkout = () => {
 
   useEffect(() => {
     const loadCartData = () => {
-      const orderData = JSON.parse(localStorage.getItem('currentOrder')) || {};
-      setCartItems(orderData.items || []);
+      const orderData = readJsonStorage('currentOrder', {});
+      setCartItems(Array.isArray(orderData.items) ? orderData.items : []);
       setOrderSummary({
         subtotal: orderData.subtotal || '0.00',
         deliveryFee: orderData.deliveryFee || '100.00',

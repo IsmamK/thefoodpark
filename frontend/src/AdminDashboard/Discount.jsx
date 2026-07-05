@@ -538,7 +538,6 @@ end_date:      dateToISOWithAutoTime(form.end_date, 'end'),
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         *, body, .font-sans { font-family: 'Plus Jakarta Sans', sans-serif; box-sizing: border-box; }
         input:focus, select:focus { outline: 2px solid #111 !important; outline-offset: 1px; }
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }

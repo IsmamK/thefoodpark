@@ -1,17 +1,28 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 
-import Home from "./pages/Home";
-import Layout from "./layouts/Layout";
-import AdminLayout from "./layouts/AdminLayout";
+const Home = lazy(() => import("./pages/Home"));
+const Layout = lazy(() => import("./layouts/Layout"));
+const AdminLayout = lazy(() => import("./layouts/AdminLayout"));
 
-import Dashboard from "./AdminDashboard/Dashboard";
-import Orders from "./AdminDashboard/Orders";
-import Products from "./AdminDashboard/Products";
-import Discount from "./AdminDashboard/Discount";
+const Dashboard = lazy(() => import("./AdminDashboard/Dashboard"));
+const Orders = lazy(() => import("./AdminDashboard/Orders"));
+const Products = lazy(() => import("./AdminDashboard/Products"));
+const Discount = lazy(() => import("./AdminDashboard/Discount"));
 
-import CategoryPage from "./pages/CategoryPage";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
+const CategoryPage = lazy(() => import("./pages/CategoryPage"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+
+const PageLoader = () => (
+  <div className="min-h-screen bg-white flex items-center justify-center">
+    <div className="h-10 w-10 rounded-full border-4 border-yellow-500 border-t-transparent animate-spin" />
+  </div>
+);
+
+const withSuspense = (element) => (
+  <Suspense fallback={<PageLoader />}>{element}</Suspense>
+);
 
 const AdminCategories = () => {
   return (
@@ -40,17 +51,26 @@ const AdminBanners = () => {
   );
 };
 
+const AdminPlaceholder = ({ title }) => {
+  return (
+    <div className="bg-white rounded-xl shadow-md p-6">
+      <h1 className="text-2xl font-bold text-gray-800 mb-2">{title}</h1>
+      <p className="text-gray-600">This admin page is not available yet.</p>
+    </div>
+  );
+};
+
 const App = () => {
   const router = createBrowserRouter([
     {
       path: "/",
-      element: <Layout />,
+      element: withSuspense(<Layout />),
       children: [
-        { index: true, element: <Home /> },
-        { path: "home", element: <Home /> },
-        { path: "categories/:id", element: <CategoryPage /> },
-        { path: "cart", element: <Cart /> },
-        { path: "checkout", element: <Checkout /> },
+        { index: true, element: withSuspense(<Home />) },
+        { path: "home", element: withSuspense(<Home />) },
+        { path: "categories/:id", element: withSuspense(<CategoryPage />) },
+        { path: "cart", element: withSuspense(<Cart />) },
+        { path: "checkout", element: withSuspense(<Checkout />) },
       ],
     },
 
@@ -61,27 +81,30 @@ const App = () => {
 
     {
       path: "/admin",
-      element: <AdminLayout />,
+      element: withSuspense(<AdminLayout />),
       children: [
-        { index: true, element: <Dashboard /> },
+        { index: true, element: withSuspense(<Dashboard />) },
 
-        { path: "dashboard", element: <Dashboard /> },
-        { path: "orders", element: <Orders /> },
-        { path: "products", element: <Products /> },
+        { path: "dashboard", element: withSuspense(<Dashboard />) },
+        { path: "orders", element: withSuspense(<Orders />) },
+        { path: "products", element: withSuspense(<Products />) },
 
-        { path: "discount", element: <Discount /> },
-        { path: "discounts", element: <Discount /> },
+        { path: "discount", element: withSuspense(<Discount />) },
+        { path: "discounts", element: withSuspense(<Discount />) },
 
         { path: "categories", element: <AdminCategories /> },
         { path: "subcategories", element: <AdminSubCategories /> },
         { path: "banners", element: <AdminBanners /> },
+        { path: "analytics", element: <AdminPlaceholder title="Analytics" /> },
+        { path: "customers", element: <AdminPlaceholder title="Customers" /> },
+        { path: "*", element: <AdminPlaceholder title="Page not found" /> },
       ],
     },
 
-    // {
-    //   path: "*",
-    //   element: <Navigate to="/" replace />,
-    // },
+    {
+      path: "*",
+      element: <Navigate to="/" replace />,
+    },
   ]);
 
   return <RouterProvider router={router} />;

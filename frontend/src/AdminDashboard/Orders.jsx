@@ -10,7 +10,6 @@ import {
   FiChevronRight, FiX, FiAlertCircle, FiPieChart,
   FiActivity, FiZap, FiRepeat,FiDownload
 } from 'react-icons/fi';
-import { downloadFinanceReport } from './FinanceReport';
 
 import Swal from 'sweetalert2';
 
@@ -53,6 +52,12 @@ const getOrderAmounts = (order) => {
 
 const fmtPlainBDT = (value) => `BDT ${toNumber(value).toFixed(2)}`;
 
+const normalizeList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+};
+
 
 const STATUS_META = {
   placed:    { label: 'Placed',      dot: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
@@ -78,6 +83,8 @@ const STATUS_TABS = [
   { id: 'delivered', label: 'Delivered',   activeClass: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
   { id: 'cancelled', label: 'Cancelled',   activeClass: 'border-red-500 bg-red-50 text-red-700' },
 ];
+
+const ORDERS_PER_PAGE = 10;
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 const Badge = ({ status }) => {
@@ -150,9 +157,10 @@ const CustomerHistoryModal = ({ phone, name, onClose, apiUrl }) => {
       .catch(() => setLoading(false));
   }, [phone]);
 
-  const deliveredOrders = useMemo(() => history?.orders.filter(o => o.status === 'delivered') || [], [history]);
-  const cancelledOrders = useMemo(() => history?.orders.filter(o => o.status === 'cancelled') || [], [history]);
-  const activeOrders = useMemo(() => history?.orders.filter(o => !['delivered','cancelled'].includes(o.status)) || [], [history]);
+  const historyOrders = useMemo(() => normalizeList(history?.orders), [history]);
+  const deliveredOrders = useMemo(() => historyOrders.filter(o => o.status === 'delivered'), [historyOrders]);
+  const cancelledOrders = useMemo(() => historyOrders.filter(o => o.status === 'cancelled'), [historyOrders]);
+  const activeOrders = useMemo(() => historyOrders.filter(o => !['delivered','cancelled'].includes(o.status)), [historyOrders]);
 
   const totalSpent = useMemo(() => deliveredOrders.reduce((s, o) => s + parseFloat(o.grandtotal || 0), 0), [deliveredOrders]);
 
@@ -315,11 +323,11 @@ const CustomerHistoryModal = ({ phone, name, onClose, apiUrl }) => {
               {history.count > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {[
-                    { status: 'placed',    label: 'Placed',      count: history.orders.filter(o=>o.status==='placed').length,    dot:'bg-amber-400' },
-                    { status: 'checkout',  label: 'Checked Out', count: history.orders.filter(o=>o.status==='checkout').length,  dot:'bg-blue-500' },
-                    { status: 'shipped',   label: 'Shipped',     count: history.orders.filter(o=>o.status==='shipped').length,   dot:'bg-indigo-500' },
-                    { status: 'delivered', label: 'Delivered',   count: history.orders.filter(o=>o.status==='delivered').length, dot:'bg-emerald-500' },
-                    { status: 'cancelled', label: 'Cancelled',   count: history.orders.filter(o=>o.status==='cancelled').length, dot:'bg-red-400' },
+                    { status: 'placed',    label: 'Placed',      count: historyOrders.filter(o=>o.status==='placed').length,    dot:'bg-amber-400' },
+                    { status: 'checkout',  label: 'Checked Out', count: historyOrders.filter(o=>o.status==='checkout').length,  dot:'bg-blue-500' },
+                    { status: 'shipped',   label: 'Shipped',     count: historyOrders.filter(o=>o.status==='shipped').length,   dot:'bg-indigo-500' },
+                    { status: 'delivered', label: 'Delivered',   count: historyOrders.filter(o=>o.status==='delivered').length, dot:'bg-emerald-500' },
+                    { status: 'cancelled', label: 'Cancelled',   count: historyOrders.filter(o=>o.status==='cancelled').length, dot:'bg-red-400' },
                   ].filter(s => s.count > 0).map(s => (
                     <div key={s.status} className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
                       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -589,12 +597,12 @@ const TopCustomers = ({ apiUrl }) => {
       setLoading(true);
       try {
         const res = await fetch(`${apiUrl}/orders/?status=delivered`);
-        const data = await res.json();
+        const data = normalizeList(await res.json());
 
         const withItems = await Promise.all(
           data.map(async (order) => {
             const ir = await fetch(`${apiUrl}/order-items/?order=${order.id}`);
-            const items = await ir.json();
+            const items = normalizeList(await ir.json());
             return { ...order, order_items: items };
           })
         );
@@ -887,7 +895,6 @@ const FinanceTab = ({ apiUrl }) => {
   <meta charset="UTF-8"/>
   <title>FoodPark — ${monthLabel} Financial Report</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Plus Jakarta Sans', sans-serif; background: #fff; color: #111827; font-size: 11px; line-height: 1.5; }
     .cover { background: #111827; color: #fff; padding: 36px 48px 28px; display: flex; justify-content: space-between; align-items: flex-end; }
@@ -1073,7 +1080,10 @@ const FinanceTab = ({ apiUrl }) => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => downloadFinanceReport({ metrics, expenses, deliveredOrders, selMonth, selYear, isCurrentMonth })}
+              onClick={async () => {
+                const { downloadFinanceReport } = await import('./FinanceReport');
+                downloadFinanceReport({ metrics, expenses, deliveredOrders, selMonth, selYear, isCurrentMonth });
+              }}
               className="flex items-center gap-1.5 px-3 py-2 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
             >
               <FiDownload size={13} /> <span className="hidden sm:inline">Export</span> PDF
@@ -1262,11 +1272,11 @@ const Orders = () => {
     try {
       setLoading(true);
       const res = await fetch(`${apiUrl}/orders/?status=${status}`);
-      const data = await res.json();
+      const data = normalizeList(await res.json());
       const withItems = await Promise.all(
         data.map(async (order) => {
           const ir = await fetch(`${apiUrl}/order-items/?order=${order.id}`);
-          const items = await ir.json();
+          const items = normalizeList(await ir.json());
           return { ...order, order_items: items };
         })
       );
@@ -1291,9 +1301,7 @@ const Orders = () => {
     }
   };
 
-  const pagedOrders = activeStatus === 'placed'
-    ? filteredOrders
-    : filteredOrders.slice((page - 1) * 10, page * 10);
+  const pagedOrders = filteredOrders.slice((page - 1) * ORDERS_PER_PAGE, page * ORDERS_PER_PAGE);
 
   const orderSummary = useMemo(() => {
     const items = {};
@@ -1434,7 +1442,6 @@ const Orders = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, .font-sans { font-family: 'Plus Jakarta Sans', sans-serif; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -1811,9 +1818,7 @@ const Orders = () => {
                   })}
                 </div>
 
-                {activeStatus !== 'placed' && (
-                  <Pagination total={filteredOrders.length} page={page} perPage={10} onChange={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
-                )}
+                <Pagination total={filteredOrders.length} page={page} perPage={ORDERS_PER_PAGE} onChange={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
               </>
             )}
           </>

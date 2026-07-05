@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const Categories = () => {
@@ -9,19 +8,25 @@ const Categories = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get(`${apiUrl}/categories/`)
-      .then(res => {
-        const activeCategories = res.data
+    const controller = new AbortController();
+
+    fetch(`${apiUrl}/categories/`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        const categoryData = Array.isArray(data) ? data : data?.results || [];
+        const activeCategories = categoryData
           .filter(cat => cat.is_active)
           .sort((a, b) => a.priority - b.priority);
         setCategories(activeCategories);
         setLoading(false);
       })
       .catch(err => {
+        if (err.name === 'AbortError') return;
         console.error(err);
         setLoading(false);
       });
-  }, []);
+    return () => controller.abort();
+  }, [apiUrl]);
 
   if (loading) {
     return (
@@ -68,6 +73,10 @@ const Categories = () => {
                   <img
                     src={category.image}
                     alt={category.name}
+                    loading="lazy"
+                    decoding="async"
+                    width="160"
+                    height="128"
                     className="max-h-full w-auto transition-transform duration-300 group-hover:scale-105"
                     style={{ filter: 'drop-shadow(0 8px 12px rgba(0,0,0,0.1))' }}
                   />

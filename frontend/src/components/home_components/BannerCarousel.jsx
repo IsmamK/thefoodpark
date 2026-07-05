@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 
 const FloatingBannerCarousel = () => {
   const [banners, setBanners] = useState([]);
@@ -10,18 +9,24 @@ const FloatingBannerCarousel = () => {
 
   
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchBanners = async () => {
       try {
-        const response = await axios.get(`${apiUrl}/banners`);
-        setBanners(response.data.filter(banner => banner.active));
+        const response = await fetch(`${apiUrl}/banners`, { signal: controller.signal });
+        const data = response.ok ? await response.json() : [];
+        const bannerData = Array.isArray(data) ? data : data?.results || [];
+        setBanners(bannerData.filter(banner => banner.active));
         setLoading(false);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('Error fetching banners:', err);
         setLoading(false);
       }
     };
     fetchBanners();
-  }, []);
+    return () => controller.abort();
+  }, [apiUrl]);
 
   // Auto-rotate banners
   useEffect(() => {
@@ -35,9 +40,9 @@ const FloatingBannerCarousel = () => {
   // Parallax effect on mouse move
   useEffect(() => {
     if (!carouselRef.current || banners.length === 0) return;
+    const carousel = carouselRef.current;
 
     const handleMouseMove = (e) => {
-      const carousel = carouselRef.current;
       const { left, top, width, height } = carousel.getBoundingClientRect();
       const x = (e.clientX - left) / width;
       const y = (e.clientY - top) / height;
@@ -47,11 +52,9 @@ const FloatingBannerCarousel = () => {
       carousel.style.setProperty('--y', `${(y - 0.5) * 10}px`);
     };
 
-    carouselRef.current.addEventListener('mousemove', handleMouseMove);
+    carousel.addEventListener('mousemove', handleMouseMove);
     return () => {
-      if (carouselRef.current) {
-        carouselRef.current.removeEventListener('mousemove', handleMouseMove);
-      }
+      carousel.removeEventListener('mousemove', handleMouseMove);
     };
   }, [banners]);
 
@@ -92,10 +95,13 @@ const FloatingBannerCarousel = () => {
             <img
               src={banner.image}
               alt="Banner"
+              decoding="async"
+              width="1200"
+              height="320"
               className={`w-full h-full object-cover rounded-3xl transition-all duration-500 ${
                 index === currentIndex ? 'opacity-100 blur-none' : 'opacity-0 blur-sm'
               }`}
-              loading="lazy"
+              loading={index === 0 ? 'eager' : 'lazy'}
             />
             {/* Subtle gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent rounded-3xl"></div>

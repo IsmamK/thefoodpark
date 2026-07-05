@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { readJsonStorage } from '../../utils/storage';
 
 const Footer = () => {
   const [cartCount, setCartCount] = useState(0);
@@ -13,8 +14,8 @@ const Footer = () => {
 
   useEffect(() => {
     const updateCartCount = () => {
-      const cartItems = JSON.parse(localStorage.getItem('cartItems')) || [];
-      setCartCount(cartItems.length);
+      const cartItems = readJsonStorage('cartItems', []);
+      setCartCount(Array.isArray(cartItems) ? cartItems.length : 0);
     };
 
     updateCartCount();
